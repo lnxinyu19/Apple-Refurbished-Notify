@@ -79,4 +79,4 @@ const filter3 = {
 
 ## 注意事項
 
-第一次執行時，Puppeteer 會下載 Chrome 瀏覽器，請耐心等待。
+第一次執行時，Puppeteer 會下載 Chrome 瀏覽器，請耐心等待。# Apple-Refurbished-Notify
