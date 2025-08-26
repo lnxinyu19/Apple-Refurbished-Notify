@@ -15,6 +15,12 @@ npm install
 npm start
 ```
 
+### 啟動伺服器
+```bash
+npm run server
+```
+啟動後開啟瀏覽器前往 `http://localhost:3000`，可透過表單填寫每位使用者的篩選條件，提交後會儲存至 `user-settings.json`。
+
 ### 篩選功能示例
 ```bash
 node filter-example.js
@@ -57,6 +63,23 @@ const filter3 = {
   maxPrice: 50000
 };
 ```
+
+## 使用者設定檔
+
+伺服器會將設定儲存於 `user-settings.json`，格式如下：
+
+```json
+[
+  {
+    "userId": "U123456",
+    "productType": "MacBook Air",
+    "chip": "M4",
+    "maxPrice": 40000
+  }
+]
+```
+
+`index.js` 執行時會讀取此設定檔，依每位使用者的條件篩選產品並透過 `lineMessaging.js` 推播結果。
 
 ## 產出檔案
 

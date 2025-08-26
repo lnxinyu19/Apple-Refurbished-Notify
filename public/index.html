@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>Apple 整修機通知設定</title>
+</head>
+<body>
+  <h1>通知條件設定</h1>
+  <form id="settingsForm">
+    <div>
+      <label>使用者 ID: <input type="text" name="userId" required></label>
+    </div>
+    <div>
+      <label>產品類型: <input type="text" name="productType"></label>
+    </div>
+    <div>
+      <label>晶片: <input type="text" name="chip"></label>
+    </div>
+    <div>
+      <label>最小記憶體(GB): <input type="number" name="minMemory"></label>
+    </div>
+    <div>
+      <label>最小儲存空間(例如 512GB,1TB): <input type="text" name="minStorage"></label>
+    </div>
+    <div>
+      <label>最高價格: <input type="number" name="maxPrice"></label>
+    </div>
+    <div>
+      <label>顏色: <input type="text" name="color"></label>
+    </div>
+    <button type="submit">儲存</button>
+  </form>
+
+  <script>
+    const form = document.getElementById('settingsForm');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const data = Object.fromEntries(formData.entries());
+      if (data.minMemory) data.minMemory = Number(data.minMemory);
+      if (data.maxPrice) data.maxPrice = Number(data.maxPrice);
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        alert('設定已儲存');
+        form.reset();
+      } else {
+        alert('儲存失敗');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs').promises;
+const lineMessaging = require('./lineMessaging');
 
 class AppleRefurbishedScraper {
   constructor() {
@@ -273,6 +274,22 @@ async function main() {
     
     if (macProducts.length > 0) {
       await scraper.saveToFile(macProducts, 'mac-products.json');
+
+      // 依使用者設定過濾並推播結果
+      try {
+        const settingsData = await fs.readFile('user-settings.json', 'utf8');
+        const users = JSON.parse(settingsData);
+        for (const user of users) {
+          const { userId, ...filters } = user;
+          const matched = scraper.filterProducts(macProducts, filters);
+          if (matched.length > 0) {
+            lineMessaging.pushMessage(userId, matched);
+          }
+        }
+      } catch (err) {
+        console.error('讀取使用者設定失敗:', err);
+      }
+
       console.log('Mac產品資料（前10項）：');
       macProducts.slice(0, 10).forEach((product, index) => {
         const specs = product.specs;
