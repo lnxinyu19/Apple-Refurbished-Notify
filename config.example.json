@@ -1,0 +1,66 @@
+{
+  "trackingRules": [
+    {
+      "name": "我想要的MacBook Pro",
+      "description": "M4 Pro晶片，至少16GB記憶體，太空黑色",
+      "enabled": true,
+      "filters": {
+        "productType": "MacBook Pro",
+        "chip": "M4 Pro",
+        "minMemory": 16,
+        "color": "太空黑色",
+        "maxPrice": 80000
+      }
+    },
+    {
+      "name": "便宜的MacBook Air",
+      "description": "任何顏色的MacBook Air M4，價格在50,000以下",
+      "enabled": true,
+      "filters": {
+        "productType": "MacBook Air",
+        "chip": "M4",
+        "maxPrice": 50000
+      }
+    },
+    {
+      "name": "高階Mac Studio",
+      "description": "Mac Studio M2 Ultra，至少32GB記憶體",
+      "enabled": false,
+      "filters": {
+        "productType": "Mac Studio",
+        "chip": "M2 Ultra",
+        "minMemory": 32,
+        "maxPrice": 150000
+      }
+    }
+  ],
+  "notification": {
+    "enabled": true,
+    "methods": ["console"],
+    "email": {
+      "smtp": {
+        "host": "smtp.gmail.com",
+        "port": 587,
+        "secure": false
+      },
+      "auth": {
+        "user": "your-email@gmail.com",
+        "pass": "your-app-password"
+      },
+      "to": "your-email@gmail.com",
+      "enabled": false
+    },
+    "webhook": {
+      "url": "",
+      "enabled": false
+    }
+  },
+  "schedule": {
+    "enabled": false,
+    "intervalMinutes": 30,
+    "quietHours": {
+      "start": "22:00",
+      "end": "08:00"
+    }
+  }
+}

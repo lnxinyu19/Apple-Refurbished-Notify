@@ -102,5 +102,12 @@ logs
 ehthumbs.db
 Thumbs.db
 
-# Generated data files (you can remove these lines if you want to track the JSON files)
+# Generated data files
 mac-products.json
+tracking-results-*.json
+
+# User configuration (contains personal tracking preferences)
+config.json
+
+# But keep the example configuration
+!config.example.json

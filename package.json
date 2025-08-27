@@ -4,14 +4,19 @@
   "description": "Apple refurbished products tracker and notifier",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node index.js",
+    "start": "node app.js",
+    "dev": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
     "puppeteer": "^24.9.0",
     "cheerio": "^1.0.0-rc.12",
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "inquirer": "^8.2.6",
+    "chalk": "^4.1.2",
+    "nodemailer": "^6.9.0",
+    "express": "^4.18.0",
+    "cors": "^2.8.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.0"
