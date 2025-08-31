@@ -105,9 +105,13 @@ Thumbs.db
 # Generated data files
 mac-products.json
 tracking-results-*.json
+previous-products.json
 
 # User configuration (contains personal tracking preferences)
 config.json
+
+# Firebase service account
+firebase-service-account.json
 
 # But keep the example configuration
 !config.example.json
