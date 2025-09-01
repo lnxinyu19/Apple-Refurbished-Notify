@@ -10,7 +10,7 @@ const NotificationManager = require('./services/notifications/NotificationManage
 class AppleTracker {
   constructor() {
     this.app = express();
-    this.port = 3000;
+    this.port = process.env.PORT || 3000;
     this.browser = null;
     this.config = { lineConfig: {} }; // 只保留LINE配置
     this.isTracking = false;
@@ -25,6 +25,15 @@ class AppleTracker {
     // 設定靜態檔案
     this.app.use(express.static('public'));
     this.app.use(express.json());
+
+    // 健康檢查端點
+    this.app.get('/', (req, res) => {
+      res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    });
+
+    this.app.get('/health', (req, res) => {
+      res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    });
 
     // API 路由
     this.app.get('/api/config', (req, res) => {
@@ -68,8 +77,22 @@ class AppleTracker {
       });
     });
 
-
-
+    // 測試產品爬取端點（前端需要）
+    this.app.get('/api/products/test', async (req, res) => {
+      try {
+        const allProducts = await this.scrapeProducts();
+        
+        res.json({
+          message: `找到 ${allProducts.length} 個產品`,
+          total: allProducts.length,
+          products: allProducts.slice(0, 10)
+        });
+        
+      } catch (error) {
+        console.error('測試產品爬取錯誤:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
 
     // 正式LINE webhook端點
     this.app.post('/webhook/line', express.json(), async (req, res) => {
@@ -121,8 +144,19 @@ class AppleTracker {
 
   async loadConfig() {
     try {
-      const configData = await fs.readFile('config.json', 'utf8');
-      this.config = JSON.parse(configData);
+      // 優先使用環境變數
+      if (process.env.LINE_CHANNEL_ACCESS_TOKEN && process.env.LINE_CHANNEL_SECRET) {
+        this.config = {
+          lineConfig: {
+            channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
+            channelSecret: process.env.LINE_CHANNEL_SECRET
+          }
+        };
+      } else {
+        // 回退到本地配置文件
+        const configData = await fs.readFile('config.json', 'utf8');
+        this.config = JSON.parse(configData);
+      }
     } catch (error) {
       // 如果檔案不存在，使用預設配置
       this.config = { lineConfig: {} };
@@ -256,7 +290,8 @@ class AppleTracker {
           break;
 
         case '新增規則':
-          replyMessage = '📝 請使用網頁介面新增追蹤規則:\nhttp://localhost:3000\n\n個人規則功能開發中...';
+          const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+          replyMessage = `📝 請使用網頁介面新增追蹤規則:\n${webUrl}\n\n個人規則功能開發中...`;
           break;
           
         default:
@@ -309,14 +344,16 @@ class AppleTracker {
 
   async getUserRulesMessage(userId) {
     if (!this.firebaseService.initialized) {
-      return `📋 您的追蹤規則\n\n⚠️  Firebase未連接，無法顯示規則\n📝 請使用網頁介面:\nhttp://localhost:3000`;
+      const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+      return `📋 您的追蹤規則\n\n⚠️  Firebase未連接，無法顯示規則\n📝 請使用網頁介面:\n${webUrl}`;
     }
     
     try {
       const rules = await this.firebaseService.getUserTrackingRules(userId);
       
       if (rules.length === 0) {
-        return `📋 您目前沒有設定追蹤規則\n\n📝 請使用網頁介面新增規則:\nhttp://localhost:3000`;
+        const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+        return `📋 您目前沒有設定追蹤規則\n\n📝 請使用網頁介面新增規則:\n${webUrl}`;
       }
       
       let message = `📋 您的追蹤規則 (${rules.length} 個):\n\n`;
@@ -339,6 +376,7 @@ class AppleTracker {
 
   getHelpMessage() {
     const activeProviders = this.notificationManager.getActiveProviderNames();
+    const webUrl = process.env.WEB_URL || 'http://localhost:3000';
     
     return `🤖 Apple 翻新機追蹤 Bot\n\n` +
            `📱 可用指令:\n` +
@@ -351,7 +389,7 @@ class AppleTracker {
            `• 幫助 - 顯示此訊息\n\n` +
            `📤 啟用通知方式: ${activeProviders.join(', ')}\n\n` +
            `🔧 詳細規則管理請使用網頁:\n` +
-           `http://localhost:3000`;
+           `${webUrl}`;
   }
 
   async scrapeProducts() {
