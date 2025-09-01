@@ -246,16 +246,10 @@ class AppleTracker {
 
 
   async handleLineEvent(event) {
-    // 處理加入好友事件
+    // 處理加入好友事件（靜默註冊）
     if (event.type === 'follow') {
       const userId = event.source.userId;
       await this.registerUser(userId);
-      
-      const welcomeMessage = this.getWelcomeMessage();
-      const lineProvider = this.notificationManager.getProvider('line');
-      if (lineProvider) {
-        await lineProvider.replyMessage(event.replyToken, welcomeMessage);
-      }
       return null;
     }
 
@@ -403,18 +397,6 @@ class AppleTracker {
     }
   }
 
-  getWelcomeMessage() {
-    const webUrl = process.env.WEB_URL || 'http://localhost:3000';
-    
-    return `🍎 您好！歡迎使用 Apple 翻新機追蹤 Bot！\n\n` +
-           `✨ 我會幫您監控 Apple 翻新機新品上架\n` +
-           `當有符合您條件的產品時會立即通知您！\n\n` +
-           `📱 快速開始：\n` +
-           `• 輸入「開始追蹤」立即開始監控\n` +
-           `• 輸入「幫助」查看所有指令\n\n` +
-           `🔧 進階設定請訪問：\n${webUrl}\n\n` +
-           `🎯 祝您搶到心儀的 Mac！`;
-  }
 
   getHelpMessage() {
     const activeProviders = this.notificationManager.getActiveProviderNames();
