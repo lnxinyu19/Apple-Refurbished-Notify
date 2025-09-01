@@ -57,7 +57,6 @@ class FirebaseService {
     };
 
     await this.db.collection('users').doc(lineUserId).set(userData);
-    console.log(`✅ 用戶已創建: ${lineUserId}`);
     return userData;
   }
 
@@ -75,7 +74,6 @@ class FirebaseService {
       'settings.notifications': notificationSettings,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
-    console.log(`✅ 用戶 ${lineUserId} 通知設定已更新`);
   }
 
   async updateUserEmail(lineUserId, email) {
@@ -84,7 +82,6 @@ class FirebaseService {
       email,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
-    console.log(`✅ 用戶 ${lineUserId} Email 已更新`);
   }
 
   // 追蹤規則管理
@@ -106,7 +103,6 @@ class FirebaseService {
     };
 
     const docRef = await this.db.collection('users').doc(lineUserId).collection('trackingRules').add(ruleData);
-    console.log(`✅ 追蹤規則已添加: ${docRef.id}`);
     return docRef.id;
   }
 
@@ -117,12 +113,10 @@ class FirebaseService {
     };
 
     await this.db.collection('users').doc(lineUserId).collection('trackingRules').doc(ruleId).update(updateData);
-    console.log(`✅ 追蹤規則已更新: ${ruleId}`);
   }
 
   async deleteTrackingRule(lineUserId, ruleId) {
     await this.db.collection('users').doc(lineUserId).collection('trackingRules').doc(ruleId).delete();
-    console.log(`✅ 追蹤規則已刪除: ${ruleId}`);
   }
 
   // 產品歷史管理
@@ -152,7 +146,6 @@ class FirebaseService {
     });
     
     await batch.commit();
-    console.log(`✅ 已儲存 ${products.length} 個產品到 Firebase`);
   }
 
   getProductId(url) {
@@ -170,7 +163,6 @@ class FirebaseService {
     };
 
     const docRef = await this.db.collection('notifications').add(notificationData);
-    console.log(`✅ 通知記錄已儲存: ${docRef.id}`);
     return docRef.id;
   }
 
@@ -186,10 +178,7 @@ class FirebaseService {
   // 統計資料
   async getSystemStats() {
     try {
-      console.log('🔍 開始查詢系統統計...');
-      
       const usersSnapshot = await this.db.collection('users').get();
-      console.log(`👥 找到 ${usersSnapshot.size} 個用戶`);
       
       // 簡化規則查詢 - 避免collectionGroup
       let totalActiveRules = 0;
@@ -198,10 +187,9 @@ class FirebaseService {
           const rulesSnapshot = await userDoc.ref.collection('trackingRules').where('enabled', '==', true).get();
           totalActiveRules += rulesSnapshot.size;
         } catch (error) {
-          console.log(`查詢用戶 ${userDoc.id} 規則時跳過:`, error.message);
+          // 靜默跳過錯誤
         }
       }
-      console.log(`📋 找到 ${totalActiveRules} 個啟用規則`);
       
       // 簡化通知查詢
       let notificationsCount = 0;
@@ -211,9 +199,8 @@ class FirebaseService {
           .where('sentAt', '>=', admin.firestore.Timestamp.fromDate(yesterday))
           .get();
         notificationsCount = notificationsSnapshot.size;
-        console.log(`📤 24小時內發送 ${notificationsCount} 則通知`);
       } catch (error) {
-        console.log('查詢通知記錄時跳過:', error.message);
+        // 靜默跳過錯誤
       }
 
       return {

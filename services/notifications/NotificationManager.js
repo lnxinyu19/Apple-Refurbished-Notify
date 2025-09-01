@@ -22,15 +22,12 @@ class NotificationManager {
           const success = await provider.initialize(providerConfig);
           if (success) {
             this.activeProviders.push(provider);
-            console.log(`✅ ${name} 通知提供者已啟用`);
           }
         } catch (error) {
           console.error(`❌ ${name} 通知提供者初始化失敗:`, error.message);
         }
       }
     }
-
-    console.log(`📤 共啟用 ${this.activeProviders.length} 個通知提供者`);
   }
 
   registerProvider(name, provider) {
@@ -95,8 +92,6 @@ class NotificationManager {
   }
 
   async sendNotificationToAll(users, message, metadata = {}) {
-    console.log(`📤 發送通知給 ${users.length} 個用戶`);
-    
     const allResults = [];
     
     for (const user of users) {
@@ -104,15 +99,13 @@ class NotificationManager {
         const results = await this.sendNotification(user, message, metadata);
         allResults.push(...results);
       } catch (error) {
-        console.error(`發送通知給用戶 ${user.lineUserId} 失敗:`, error.message);
+        // 靜默跳過錯誤
       }
     }
 
     // 統計結果
     const successCount = allResults.filter(r => r.success).length;
     const failCount = allResults.filter(r => !r.success).length;
-    
-    console.log(`📊 通知發送完成: ${successCount} 成功, ${failCount} 失敗`);
     
     return {
       total: allResults.length,

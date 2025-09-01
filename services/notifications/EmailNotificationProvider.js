@@ -26,7 +26,6 @@ class EmailNotificationProvider extends NotificationProvider {
 
       this.enabled = true;
       this.fromEmail = config.auth.user;
-      console.log('✅ Email 通知提供者已初始化');
       return true;
     } catch (error) {
       console.error('❌ Email 通知提供者初始化失敗:', error.message);
@@ -67,7 +66,6 @@ class EmailNotificationProvider extends NotificationProvider {
 
       const result = await this.transporter.sendMail(mailOptions);
 
-      console.log(`✅ Email 通知已發送給 ${userEmail}`);
       return {
         success: true,
         provider: 'email',
@@ -76,7 +74,6 @@ class EmailNotificationProvider extends NotificationProvider {
         sentAt: new Date().toISOString()
       };
     } catch (error) {
-      console.error(`❌ Email 通知發送失敗 (${userEmail}):`, error.message);
       return {
         success: false,
         provider: 'email',

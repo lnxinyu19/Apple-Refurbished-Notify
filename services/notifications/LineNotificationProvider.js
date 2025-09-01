@@ -19,7 +19,6 @@ class LineNotificationProvider extends NotificationProvider {
       });
 
       this.enabled = true;
-      console.log('✅ LINE 通知提供者已初始化');
       return true;
     } catch (error) {
       console.error('❌ LINE 通知提供者初始化失敗:', error.message);
@@ -59,7 +58,6 @@ class LineNotificationProvider extends NotificationProvider {
         }]
       });
 
-      console.log(`✅ LINE 通知已發送給 ${userId}`);
       return {
         success: true,
         provider: 'line',
@@ -67,7 +65,6 @@ class LineNotificationProvider extends NotificationProvider {
         sentAt: new Date().toISOString()
       };
     } catch (error) {
-      console.error(`❌ LINE 通知發送失敗 (${userId}):`, error.message);
       return {
         success: false,
         provider: 'line',
@@ -93,7 +90,6 @@ class LineNotificationProvider extends NotificationProvider {
         }]
       });
 
-      console.log('✅ LINE 回覆訊息已發送');
       return true;
     } catch (error) {
       console.error('❌ LINE 回覆訊息失敗:', error.message);

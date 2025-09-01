@@ -68,77 +68,8 @@ class AppleTracker {
       });
     });
 
-    this.app.get('/api/products/test', async (req, res) => {
-      try {
-        const allProducts = await this.scrapeProducts();
-        console.log(`爬取到 ${allProducts.length} 個產品`);
-        
-        res.json({
-          message: `找到 ${allProducts.length} 個產品`,
-          total: allProducts.length,
-          products: allProducts.slice(0, 10) // 只顯示前10個作為範例
-        });
-        
-      } catch (error) {
-        console.error('測試產品爬取錯誤:', error);
-        res.status(500).json({ error: error.message });
-      }
-    });
 
-    this.app.post('/api/test/notifications', async (req, res) => {
-      try {
-        const testMessage = '🧪 這是一個測試通知\n✅ 通知系統連接正常！';
-        const { userId } = req.body;
-        
-        if (!userId) {
-          return res.status(400).json({ error: '需要提供 userId' });
-        }
 
-        const user = await this.firebaseService.getUser(userId);
-        if (!user) {
-          return res.status(404).json({ error: '用戶不存在' });
-        }
-
-        const results = await this.notificationManager.sendNotification(user, testMessage);
-        
-        const successCount = results.filter(r => r.success).length;
-        const totalCount = results.length;
-        
-        res.json({ 
-          success: successCount > 0,
-          message: `通知測試完成: ${successCount}/${totalCount} 成功`,
-          results,
-          activeProviders: this.notificationManager.getActiveProviderNames()
-        });
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    // 簡單測試端點
-    this.app.post('/test-webhook', (req, res) => {
-      console.log('📥 測試webhook收到請求:', req.body);
-      res.status(200).json({ success: true, message: 'Webhook test successful' });
-    });
-
-    // 臨時不驗證簽名的LINE webhook端點（除錯用）
-    this.app.post('/webhook/line-debug', express.json(), async (req, res) => {
-      try {
-        console.log('🔍 DEBUG webhook收到請求:', JSON.stringify(req.body, null, 2));
-        
-        if (!req.body.events || req.body.events.length === 0) {
-          return res.status(200).json([]);
-        }
-        
-        const results = await Promise.all(req.body.events.map(this.handleLineEvent.bind(this)));
-        console.log('✅ DEBUG LINE事件處理完成');
-        res.status(200).json(results);
-        
-      } catch (error) {
-        console.error('❌ DEBUG webhook錯誤:', error.message);
-        res.status(200).json([]);
-      }
-    });
 
     // 正式LINE webhook端點
     this.app.post('/webhook/line', express.json(), async (req, res) => {
@@ -242,36 +173,27 @@ class AppleTracker {
   formatNewProductMessage(newProducts) {
     if (newProducts.length === 0) return null;
     
-    // LINE訊息限制約5000字元，限制顯示產品數量
-    const maxProducts = Math.min(newProducts.length, 5);
+    // LINE訊息限制，顯示更多產品
+    const maxProducts = Math.min(newProducts.length, 10);
     const displayProducts = newProducts.slice(0, maxProducts);
     
-    let message = `🆕 發現 ${newProducts.length} 個新的翻新產品！\n`;
-    if (newProducts.length > maxProducts) {
-      message += `📱 以下顯示前 ${maxProducts} 個:\n`;
-    }
-    message += '\n';
+    let message = `🆕 發現 ${newProducts.length} 個新翻新產品！\n\n`;
     
     displayProducts.forEach((product, index) => {
-      message += `${index + 1}. ${product.name.substring(0, 50)}${product.name.length > 50 ? '...' : ''}\n`;
+      // 簡化產品名稱（移除冗餘描述）
+      const shortName = product.name.replace(/整修品.*$/, '').trim();
+      message += `${index + 1}. ${shortName}\n`;
       message += `💰 ${product.price}\n`;
-      if (product.specs.chip) message += `🔧 ${product.specs.chip}\n`;
-      if (product.specs.memory) message += `💾 ${product.specs.memory}\n`;
-      if (product.specs.storage) message += `💽 ${product.specs.storage}\n`;
       message += `🔗 ${product.url}\n\n`;
     });
     
     if (newProducts.length > maxProducts) {
-      message += `\n📱 還有 ${newProducts.length - maxProducts} 個產品，請至網頁查看完整列表`;
-    }
-    
-    // 確保訊息不超過5000字元
-    if (message.length > 4900) {
-      message = message.substring(0, 4900) + '\n...';
+      message += `📱 還有 ${newProducts.length - maxProducts} 個產品`;
     }
     
     return message;
   }
+
 
   async handleLineEvent(event) {
     if (event.type !== 'message' || event.message.type !== 'text') {
@@ -281,7 +203,6 @@ class AppleTracker {
     const userId = event.source.userId;
     const messageText = event.message.text.trim();
     
-    console.log(`收到LINE訊息 from ${userId}: ${messageText}`);
     
     // 註冊使用者
     await this.registerUser(userId);
@@ -438,7 +359,6 @@ class AppleTracker {
     
     try {
       const url = 'https://www.apple.com/tw/shop/refurbished/mac';
-      console.log(`正在爬取: ${url}`);
       
       await page.goto(url, { waitUntil: 'networkidle2' });
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -670,11 +590,9 @@ class AppleTracker {
   async trackProducts() {
     try {
       const allProducts = await this.scrapeProducts();
-      console.log(`找到 ${allProducts.length} 個產品`);
       
       // 檢測新產品
       const newProducts = await this.detectNewProducts(allProducts);
-      console.log(`🆕 發現 ${newProducts.length} 個新產品`);
       
       // 獲取所有用戶及其追蹤規則
       const activeUsers = await this.firebaseService.getActiveUsers();
@@ -682,23 +600,13 @@ class AppleTracker {
       
       for (const user of activeUsers) {
         const userRules = await this.firebaseService.getUserTrackingRules(user.lineUserId);
-        console.log(`👤 用戶 ${user.lineUserId} 有 ${userRules.length} 個追蹤規則`);
         
         let userNewMatches = [];
         
         for (const rule of userRules) {
-          console.log(`🔍 檢查規則 "${rule.name}":`, rule.filters);
-          
-          // 顯示前幾個新產品的類型，幫助除錯
-          if (newProducts.length > 0) {
-            console.log(`🔍 前3個新品類型:`, newProducts.slice(0, 3).map(p => p.specs.productType));
-          }
-          
           const newMatches = this.filterProducts(newProducts, rule.filters);
-          console.log(`📊 規則 "${rule.name}" 在 ${newProducts.length} 個新品中找到 ${newMatches.length} 個符合項目`);
           
           if (newMatches.length > 0) {
-            console.log(`✅ 用戶 ${user.lineUserId} 規則 "${rule.name}" 找到 ${newMatches.length} 個新品`);
             userNewMatches = userNewMatches.concat(newMatches);
           }
         }
