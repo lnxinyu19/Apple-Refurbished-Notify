@@ -170,7 +170,7 @@ class AppleTracker {
     return results;
   }
 
-  formatNewProductMessage(newProducts) {
+  async formatNewProductMessage(newProducts) {
     if (newProducts.length === 0) return null;
     
     // LINE訊息限制，顯示更多產品
@@ -179,19 +179,40 @@ class AppleTracker {
     
     let message = `🆕 發現 ${newProducts.length} 個新翻新產品！\n\n`;
     
-    displayProducts.forEach((product, index) => {
+    for (let i = 0; i < displayProducts.length; i++) {
+      const product = displayProducts[i];
       // 簡化產品名稱（移除冗餘描述）
       const shortName = product.name.replace(/整修品.*$/, '').trim();
-      message += `${index + 1}. ${shortName}\n`;
+      const shortUrl = await this.shortenUrl(product.url);
+      
+      message += `${i + 1}. ${shortName}\n`;
       message += `💰 ${product.price}\n`;
-      message += `🔗 ${product.url}\n\n`;
-    });
+      message += `🔗 ${shortUrl}\n\n`;
+    }
     
     if (newProducts.length > maxProducts) {
       message += `📱 還有 ${newProducts.length - maxProducts} 個產品`;
     }
     
     return message;
+  }
+
+  async shortenUrl(url) {
+    try {
+      // 使用 TinyURL API
+      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`);
+      const shortUrl = await response.text();
+      
+      // 檢查是否成功縮短
+      if (shortUrl.startsWith('https://tinyurl.com/')) {
+        return shortUrl;
+      }
+      
+      return url; // 失敗時返回原網址
+    } catch (error) {
+      console.error('URL縮短失敗:', error);
+      return url; // 失敗時返回原網址
+    }
   }
 
 
@@ -618,7 +639,7 @@ class AppleTracker {
         
         // 發送個人通知
         if (userNewMatches.length > 0) {
-          const message = this.formatNewProductMessage(userNewMatches);
+          const message = await this.formatNewProductMessage(userNewMatches);
           if (message) {
             const productIds = userNewMatches.map(p => this.firebaseService.getProductId(p.url));
             const results = await this.notificationManager.sendNotification(
