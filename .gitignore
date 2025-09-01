@@ -71,7 +71,8 @@ dist
 
 # Gatsby files
 .cache/
-public
+# Remove public from gitignore - we need it for frontend
+# public
 
 # Storybook build outputs
 .out

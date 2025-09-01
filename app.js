@@ -26,11 +26,6 @@ class AppleTracker {
     this.app.use(express.static('public'));
     this.app.use(express.json());
 
-    // 健康檢查端點
-    this.app.get('/', (req, res) => {
-      res.sendFile(path.join(__dirname, 'public', 'index.html'));
-    });
-
     this.app.get('/health', (req, res) => {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
