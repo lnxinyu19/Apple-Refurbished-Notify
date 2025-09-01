@@ -246,6 +246,19 @@ class AppleTracker {
 
 
   async handleLineEvent(event) {
+    // 處理加入好友事件
+    if (event.type === 'follow') {
+      const userId = event.source.userId;
+      await this.registerUser(userId);
+      
+      const welcomeMessage = this.getWelcomeMessage();
+      const lineProvider = this.notificationManager.getProvider('line');
+      if (lineProvider) {
+        await lineProvider.replyMessage(event.replyToken, welcomeMessage);
+      }
+      return null;
+    }
+
     if (event.type !== 'message' || event.message.type !== 'text') {
       return null;
     }
@@ -390,6 +403,19 @@ class AppleTracker {
     }
   }
 
+  getWelcomeMessage() {
+    const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+    
+    return `🍎 您好！歡迎使用 Apple 翻新機追蹤 Bot！\n\n` +
+           `✨ 我會幫您監控 Apple 翻新機新品上架\n` +
+           `當有符合您條件的產品時會立即通知您！\n\n` +
+           `📱 快速開始：\n` +
+           `• 輸入「開始追蹤」立即開始監控\n` +
+           `• 輸入「幫助」查看所有指令\n\n` +
+           `🔧 進階設定請訪問：\n${webUrl}\n\n` +
+           `🎯 祝您搶到心儀的 Mac！`;
+  }
+
   getHelpMessage() {
     const activeProviders = this.notificationManager.getActiveProviderNames();
     const webUrl = process.env.WEB_URL || 'http://localhost:3000';
@@ -412,94 +438,103 @@ class AppleTracker {
     const page = await this.browser.newPage();
     
     try {
-      const url = 'https://www.apple.com/tw/shop/refurbished/mac';
+      // 爬取台灣可用的 Apple 翻新產品類別
+      const urls = [
+        'https://www.apple.com/tw/shop/refurbished/mac',
+        'https://www.apple.com/tw/shop/refurbished/ipad',
+        'https://www.apple.com/tw/shop/refurbished/appletv'
+      ];
       
-      await page.goto(url, { waitUntil: 'networkidle2' });
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      let allProducts = [];
       
-      const products = await page.evaluate(() => {
-        const productData = [];
-        
-        console.log('開始解析頁面...');
-        
-        // 直接尋找所有整修機產品連結
-        const links = document.querySelectorAll('a[href*="/shop/product/"]');
-        console.log(`找到 ${links.length} 個產品連結`);
-        
-        // 過濾出整修機產品連結
-        const refurbishedLinks = Array.from(links).filter(a => {
-          const href = a.href.toLowerCase();
-          const text = a.textContent.toLowerCase();
+      for (const url of urls) {
+        try {
+          await page.goto(url, { waitUntil: 'networkidle2' });
+          await new Promise(resolve => setTimeout(resolve, 2000));
           
-          // 必須是整修機產品
-          const isRefurbished = href.includes('refurbished') || text.includes('整修品') || text.includes('整修');
-          
-          // 必須是Mac產品
-          const isMac = text.includes('mac') || text.includes('imac');
-          
-          if (isRefurbished && isMac) {
-            console.log('找到整修Mac產品:', a.textContent.trim().substring(0, 60));
-            return true;
-          }
-          return false;
-        });
-        
-        console.log(`過濾後找到 ${refurbishedLinks.length} 個整修Mac產品`);
-        
-        // 從每個產品連結提取資訊
-        refurbishedLinks.forEach((link, index) => {
-          try {
-            const name = link.textContent.trim();
+          const products = await page.evaluate((currentUrl) => {
+            const productData = [];
             
-            // 尋找價格 - 在父元素中搜尋
-            let price = '';
-            let currentElement = link.parentElement;
-            let searchDepth = 0;
+            // 直接尋找所有整修機產品連結
+            const links = document.querySelectorAll('a[href*="/shop/product/"]');
             
-            while (currentElement && searchDepth < 6) {
-              const containerText = currentElement.textContent || '';
-              const priceMatch = containerText.match(/NT\$[\d,]+/);
-              if (priceMatch) {
-                price = priceMatch[0];
-                break;
+            // 過濾出整修機產品連結
+            const refurbishedLinks = Array.from(links).filter(a => {
+              const href = a.href.toLowerCase();
+              const text = a.textContent.toLowerCase();
+              
+              // 必須是整修機產品
+              const isRefurbished = href.includes('refurbished') || text.includes('整修品') || text.includes('整修');
+              
+              if (isRefurbished && text.trim().length > 0) {
+                return true;
               }
-              currentElement = currentElement.parentElement;
-              searchDepth++;
-            }
+              return false;
+            });
             
-            // 尋找圖片
-            let image = '';
-            const parentContainer = link.closest('div');
-            if (parentContainer) {
-              const imgElement = parentContainer.querySelector('img');
-              if (imgElement) {
-                image = imgElement.src || imgElement.getAttribute('data-src') || '';
+            // 從每個產品連結提取資訊
+            refurbishedLinks.forEach((link, index) => {
+              try {
+                const name = link.textContent.trim();
+                
+                // 尋找價格
+                let price = '';
+                let currentElement = link.parentElement;
+                let searchDepth = 0;
+                
+                while (currentElement && searchDepth < 6) {
+                  const containerText = currentElement.textContent || '';
+                  const priceMatch = containerText.match(/NT\$[\d,]+/);
+                  if (priceMatch) {
+                    price = priceMatch[0];
+                    break;
+                  }
+                  currentElement = currentElement.parentElement;
+                  searchDepth++;
+                }
+                
+                // 尋找圖片
+                let image = '';
+                const parentContainer = link.closest('div');
+                if (parentContainer) {
+                  const imgElement = parentContainer.querySelector('img');
+                  if (imgElement) {
+                    image = imgElement.src || imgElement.getAttribute('data-src') || '';
+                  }
+                }
+                
+                if (name.length > 0) {
+                  productData.push({
+                    name: name,
+                    price: price || '價格未找到',
+                    image: image || '',
+                    description: name,
+                    url: link.href,
+                    category: currentUrl.includes('/mac') ? 'Mac' :
+                             currentUrl.includes('/ipad') ? 'iPad' :
+                             currentUrl.includes('/appletv') ? 'Apple TV' : 'Other'
+                  });
+                }
+                
+              } catch (e) {
+                // 靜默跳過錯誤
               }
-            }
+            });
             
-            if (name.length > 0) {
-              productData.push({
-                name: name,
-                price: price || '價格未找到',
-                image: image || '',
-                description: name, // 使用名稱作為描述
-                url: link.href // 添加產品頁面連結
-              });
-            }
-            
-          } catch (e) {
-            console.log(`解析產品 ${index} 時出錯:`, e.message);
-          }
-        });
-        
-        console.log(`總共找到 ${productData.length} 個產品`);
-        return productData;
-      });
+            return productData;
+          }, url);
+          
+          allProducts = allProducts.concat(products);
+          
+        } catch (error) {
+          console.error(`爬取 ${url} 失敗:`, error.message);
+        }
+      }
 
       // 解析產品規格
-      const productsWithSpecs = products.map(product => ({
+      const productsWithSpecs = allProducts.map(product => ({
         ...product,
-        specs: this.parseSpecs(product.name, product.description)
+        specs: this.parseSpecs(product.name, product.description, product.category)
       }));
 
       return productsWithSpecs;
@@ -512,7 +547,7 @@ class AppleTracker {
     }
   }
 
-  parseSpecs(name, description) {
+  parseSpecs(name, description, category) {
     const normalizedName = name ? name.replace(/\u00A0/g, ' ') : '';
     const normalizedDescription = description ? description.replace(/\u00A0/g, ' ') : '';
     
@@ -522,15 +557,21 @@ class AppleTracker {
       memory: null,
       storage: null,
       color: null,
-      productType: null
+      productType: null,
+      category: category || 'Other'
     };
 
-    // 產品類型
+    // 產品類型 - 支援所有 Apple 產品
     if (normalizedName.includes('MacBook Air')) specs.productType = 'MacBook Air';
     else if (normalizedName.includes('MacBook Pro')) specs.productType = 'MacBook Pro';
     else if (normalizedName.includes('Mac Studio')) specs.productType = 'Mac Studio';
     else if (normalizedName.includes('Mac mini')) specs.productType = 'Mac mini';
     else if (normalizedName.includes('iMac')) specs.productType = 'iMac';
+    else if (normalizedName.includes('iPad Pro')) specs.productType = 'iPad Pro';
+    else if (normalizedName.includes('iPad Air')) specs.productType = 'iPad Air';
+    else if (normalizedName.includes('iPad mini')) specs.productType = 'iPad mini';
+    else if (normalizedName.includes('iPad')) specs.productType = 'iPad';
+    else if (normalizedName.includes('Apple TV')) specs.productType = 'Apple TV';
 
     // 螢幕尺寸
     const sizeMatch = normalizedName.match(/(\d+)\s*吋/);
