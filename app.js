@@ -169,6 +169,23 @@ class AppleTracker {
       }
     });
 
+    // 刪除單一追蹤規則
+    this.app.delete('/api/users/:userId/rules/:ruleId', async (req, res) => {
+      try {
+        const { userId, ruleId } = req.params;
+
+        if (!this.firebaseService.initialized) {
+          return res.status(503).json({ error: 'Firebase 未連接' });
+        }
+
+        await this.firebaseService.deleteTrackingRule(userId, ruleId);
+        res.json({ success: true, message: '規則已刪除' });
+      } catch (error) {
+        console.error('刪除規則錯誤:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     this.app.post('/api/track/start', async (req, res) => {
       try {
         if (this.isTracking) {
@@ -469,9 +486,24 @@ class AppleTracker {
             replyMessage = `📝 請使用網頁介面新增追蹤規則:\n${webUrl}\n\n⚠️ 提醒：請先設定 LIFF ID 以便識別身份`;
           }
           break;
+
+        case '/delete':
+        case '/remove':
+        case '/del':
+        case 'delete rule':
+        case 'remove rule':
+          replyMessage = await this.getDeleteRulesMessage(userId);
+          break;
           
         default:
-          replyMessage = '❓ 不認識的指令\n請輸入「/help」查看可用指令';
+          // 檢查是否是刪除規則指令格式: /delete 1 或 delete 1
+          const deleteMatch = messageText.match(/^(?:\/delete|\/remove|\/del|delete\s+rule|remove\s+rule)\s+(\d+)$/i);
+          if (deleteMatch) {
+            const ruleNumber = parseInt(deleteMatch[1]);
+            replyMessage = await this.deleteRuleByNumber(userId, ruleNumber);
+          } else {
+            replyMessage = '❓ 不認識的指令\n請輸入「/help」查看可用指令';
+          }
       }
       
       if (replyMessage) {
@@ -557,6 +589,66 @@ class AppleTracker {
     }
   }
 
+  async getDeleteRulesMessage(userId) {
+    if (!this.firebaseService.initialized) {
+      return '❌ Firebase未連接，無法刪除規則';
+    }
+    
+    try {
+      const rules = await this.firebaseService.getUserTrackingRules(userId);
+      
+      if (rules.length === 0) {
+        return '📋 您目前沒有任何追蹤規則可以刪除';
+      }
+      
+      let message = `🗑️ 選擇要刪除的規則 (${rules.length} 個):\n\n`;
+      
+      rules.forEach((rule, index) => {
+        message += `${index + 1}. ${rule.name}\n`;
+        if (rule.filters.productType) message += `   📱 ${rule.filters.productType}`;
+        if (rule.filters.chip) message += ` ${rule.filters.chip}`;
+        if (rule.filters.minMemory) message += ` ≥${rule.filters.minMemory}GB`;
+        message += '\n\n';
+      });
+      
+      message += '💬 使用方式:\n';
+      message += '• 輸入 "/delete 1" 刪除第1個規則\n';
+      message += '• 輸入 "/delete 2" 刪除第2個規則\n';
+      message += '• 以此類推...';
+      
+      return message;
+    } catch (error) {
+      console.error('取得刪除規則列表錯誤:', error);
+      return '❌ 無法取得規則列表';
+    }
+  }
+
+  async deleteRuleByNumber(userId, ruleNumber) {
+    if (!this.firebaseService.initialized) {
+      return '❌ Firebase未連接，無法刪除規則';
+    }
+    
+    try {
+      const rules = await this.firebaseService.getUserTrackingRules(userId);
+      
+      if (rules.length === 0) {
+        return '📋 您目前沒有任何追蹤規則';
+      }
+      
+      if (ruleNumber < 1 || ruleNumber > rules.length) {
+        return `❌ 無效的規則編號。請輸入 1 到 ${rules.length} 之間的數字`;
+      }
+      
+      const ruleToDelete = rules[ruleNumber - 1];
+      await this.firebaseService.deleteTrackingRule(userId, ruleToDelete.id);
+      
+      return `✅ 已成功刪除規則：${ruleToDelete.name}`;
+    } catch (error) {
+      console.error('刪除規則錯誤:', error);
+      return '❌ 刪除規則失敗，請稍後再試';
+    }
+  }
+
 
   getHelpMessage() {
     const activeProviders = this.notificationManager.getActiveProviderNames();
@@ -569,6 +661,8 @@ class AppleTracker {
            `• /status - 查看系統狀態\n` +
            `• /rules - 查看個人追蹤規則\n` +
            `• /add - 設定個人追蹤規則\n` +
+           `• /delete - 刪除追蹤規則\n` +
+           `• /delete 1 - 刪除第1個規則\n` +
            `• /test - 測試Bot連接\n` +
            `• /help - 顯示此訊息\n\n` +
            `📤 啟用通知方式: ${activeProviders.join(', ')}\n\n` +

@@ -566,17 +566,34 @@
                 }
             }
 
-            deleteRule(ruleId) {
+            async deleteRule(ruleId) {
                 console.log('執行刪除規則:', ruleId);
-                const originalLength = this.config.trackingRules.length;
-                this.config.trackingRules = this.config.trackingRules.filter(rule => rule.id !== ruleId);
                 
-                if (this.config.trackingRules.length < originalLength) {
-                    console.log('規則已刪除');
-                    this.saveConfig();
+                if (!this.isLiffReady || !this.currentUser) {
+                    alert('請透過 LINE 登入後再刪除規則');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/api/users/${this.currentUser.userId}/rules/${ruleId}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    console.log('刪除結果:', result);
+
+                    // 從本地配置中移除規則
+                    this.config.trackingRules = this.config.trackingRules.filter(rule => rule.id !== ruleId);
                     this.updateUI();
-                } else {
-                    console.error('未找到要刪除的規則:', ruleId);
+                    
+                    alert('規則已成功刪除！');
+                } catch (error) {
+                    console.error('刪除規則失敗:', error);
+                    alert('刪除規則失敗: ' + error.message);
                 }
             }
 
