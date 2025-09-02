@@ -236,7 +236,8 @@ class AppleTracker {
         message += `💰 ${product.price}\n`;
         
         if (product.url) {
-          message += `🔗 ${product.url}\n`;
+          const shortUrl = await this.shortenUrl(product.url);
+          message += `🔗 ${shortUrl}\n`;
         }
         message += '\n';
       }
@@ -249,10 +250,10 @@ class AppleTracker {
 
   async shortenUrl(url) {
     try {
-      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`);
+      const response = await fetch(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(url)}`);
       const shortUrl = await response.text();
       
-      if (shortUrl.startsWith('https://tinyurl.com/')) {
+      if (shortUrl.startsWith('https://is.gd/') && !shortUrl.includes('Error')) {
         return shortUrl;
       }
       
