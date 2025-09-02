@@ -517,7 +517,7 @@
                 }
             }
 
-            addRule(e) {
+            async addRule(e) {
                 e.preventDefault();
                 
                 // 確保 trackingRules 陣列存在
@@ -559,7 +559,7 @@
                 
                 try {
                     this.config.trackingRules.push(rule);
-                    this.saveConfig();
+                    await this.saveConfig();
                     this.updateUI();
                     
                     document.getElementById('ruleForm').reset();
@@ -601,13 +601,13 @@
                 }
             }
 
-            toggleRule(ruleId) {
+            async toggleRule(ruleId) {
                 console.log('執行切換規則:', ruleId);
                 const rule = this.config.trackingRules.find(r => r.id === ruleId);
                 if (rule) {
                     rule.enabled = !rule.enabled;
                     console.log('規則狀態已切換為:', rule.enabled);
-                    this.saveConfig();
+                    await this.saveConfig();
                     this.updateUI();
                 } else {
                     console.error('未找到要切換的規則:', ruleId);
@@ -660,7 +660,7 @@
                     const toggleBtns = container.querySelectorAll('.toggle-rule-btn');
                     console.log('找到切換按鈕:', toggleBtns.length);
                     toggleBtns.forEach(btn => {
-                        btn.addEventListener('click', (e) => {
+                        btn.addEventListener('click', async (e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             
@@ -670,7 +670,7 @@
                             console.log('切換規則:', ruleId, 'target:', target);
                             
                             if (ruleId) {
-                                this.toggleRule(ruleId);
+                                await this.toggleRule(ruleId);
                             } else {
                                 console.error('無法獲取 rule-id');
                             }

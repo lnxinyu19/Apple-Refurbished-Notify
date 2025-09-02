@@ -127,11 +127,14 @@ class AppleTracker {
     this.app.get('/api/users/:userId/config', async (req, res) => {
       try {
         const userId = req.params.userId;
+        console.log(`[DEBUG] 配置獲取請求 - 用戶: ${userId}`);
+        
         if (!this.firebaseService.initialized) {
           return res.json({ trackingRules: [] });
         }
 
         const rules = await this.firebaseService.getUserTrackingRules(userId);
+        console.log(`[DEBUG] 返回給前端的規則:`, rules);
         res.json({ trackingRules: rules });
       } catch (error) {
         console.error('取得用戶配置錯誤:', error);
@@ -144,6 +147,9 @@ class AppleTracker {
         const userId = req.params.userId;
         const { trackingRules } = req.body;
 
+        console.log(`[DEBUG] 配置保存請求 - 用戶: ${userId}`);
+        console.log(`[DEBUG] 前端傳送的規則:`, trackingRules);
+
         if (!this.firebaseService.initialized) {
           return res.status(503).json({ error: 'Firebase 未連接' });
         }
@@ -153,12 +159,18 @@ class AppleTracker {
 
         // 取得現有規則
         const existingRules = await this.firebaseService.getUserTrackingRules(userId);
+        console.log(`[DEBUG] Firebase 現有規則:`, existingRules);
+        
         const existingRuleIds = new Set(existingRules.map(r => r.id));
+        console.log(`[DEBUG] 現有規則 ID:`, Array.from(existingRuleIds));
 
         // 只刪除不在新規則列表中的規則
         const newRuleIds = new Set(trackingRules.map(r => r.id));
+        console.log(`[DEBUG] 新規則 ID:`, Array.from(newRuleIds));
+        
         for (const rule of existingRules) {
           if (!newRuleIds.has(rule.id)) {
+            console.log(`[DEBUG] 刪除規則: ${rule.id}`);
             await this.firebaseService.deleteTrackingRule(userId, rule.id);
           }
         }
@@ -166,12 +178,16 @@ class AppleTracker {
         // 新增或更新規則
         for (const rule of trackingRules) {
           if (existingRuleIds.has(rule.id)) {
+            console.log(`[DEBUG] 更新規則: ${rule.id}`);
             await this.firebaseService.updateTrackingRule(userId, rule.id, rule);
           } else {
-            await this.firebaseService.addTrackingRule(userId, rule);
+            console.log(`[DEBUG] 添加新規則: ${rule.id || '無 ID'}`);
+            const createdId = await this.firebaseService.addTrackingRule(userId, rule);
+            console.log(`[DEBUG] 新規則創建完成，ID: ${createdId}`);
           }
         }
 
+        console.log(`[DEBUG] 配置保存完成`);
         res.json({ success: true, message: '配置已儲存' });
       } catch (error) {
         console.error('儲存用戶配置錯誤:', error);
