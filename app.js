@@ -1,6 +1,6 @@
+require('dotenv').config();
 const express = require('express');
 const puppeteer = require('puppeteer');
-const fs = require('fs').promises;
 const path = require('path');
 const { exec } = require('child_process');
 const line = require('@line/bot-sdk');
@@ -29,25 +29,98 @@ class AppleTracker {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
 
-    this.app.get('/api/config', (req, res) => {
-      res.json(this.config);
-    });
-
-    this.app.post('/api/config', async (req, res) => {
-      try {
-        this.config = req.body;
-        await this.saveConfig();
-        res.json({ success: true });
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
-    });
 
     // LIFF 設定端點
     this.app.get('/api/liff-config', (req, res) => {
       res.json({ 
         liffId: process.env.LINE_LIFF_ID || null 
       });
+    });
+
+    // LINE Login 設定端點
+    this.app.get('/api/line-login-config', (req, res) => {
+      res.json({ 
+        channelId: process.env.LINE_LOGIN_CHANNEL_ID || null,
+        redirectUri: process.env.LINE_LOGIN_REDIRECT_URI || null
+      });
+    });
+
+    // LINE Login 授權端點
+    this.app.get('/auth/line', (req, res) => {
+      const channelId = process.env.LINE_LOGIN_CHANNEL_ID;
+      const redirectUri = encodeURIComponent(process.env.LINE_LOGIN_REDIRECT_URI);
+      const state = Math.random().toString(36).substring(2, 15);
+      
+      // 將 state 存在 session 中 (簡單實作，生產環境建議使用 Redis)
+      req.session = { ...req.session, lineLoginState: state };
+      
+      const authUrl = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${channelId}&redirect_uri=${redirectUri}&state=${state}&scope=profile%20openid`;
+      
+      res.redirect(authUrl);
+    });
+
+    // LINE Login 回調端點
+    this.app.get('/auth/line/callback', async (req, res) => {
+      try {
+        const { code, state } = req.query;
+        
+        if (!code) {
+          return res.redirect('/?error=no_code');
+        }
+
+        // 獲取 access token
+        const tokenResponse = await fetch('https://api.line.me/oauth2/v2.1/token', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code: code,
+            redirect_uri: process.env.LINE_LOGIN_REDIRECT_URI,
+            client_id: process.env.LINE_LOGIN_CHANNEL_ID,
+            client_secret: process.env.LINE_CHANNEL_SECRET,
+          }),
+        });
+
+        const tokenData = await tokenResponse.json();
+        
+        if (tokenData.error) {
+          return res.redirect(`/?error=${tokenData.error}`);
+        }
+
+        // 獲取用戶資訊
+        const profileResponse = await fetch('https://api.line.me/v2/profile', {
+          headers: {
+            Authorization: `Bearer ${tokenData.access_token}`,
+          },
+        });
+
+        const profile = await profileResponse.json();
+        
+        if (profile.error) {
+          return res.redirect(`/?error=profile_error`);
+        }
+
+        // 確保用戶在 Firebase 中存在
+        if (this.firebaseService.initialized) {
+          await this.firebaseService.getOrCreateUser(profile.userId);
+        }
+
+        // 重定向到前端，帶上用戶資訊
+        const userInfo = encodeURIComponent(JSON.stringify({
+          userId: profile.userId,
+          displayName: profile.displayName,
+          pictureUrl: profile.pictureUrl,
+          loginMethod: 'line-login'
+        }));
+        
+        res.redirect(`/?user=${userInfo}`);
+        
+      } catch (error) {
+        console.error('LINE Login 回調錯誤:', error);
+        res.redirect('/?error=callback_error');
+      }
     });
 
     // 用戶專屬配置 API
@@ -181,26 +254,14 @@ class AppleTracker {
 
 
   async loadConfig() {
-    try {
-      if (process.env.LINE_CHANNEL_ACCESS_TOKEN && process.env.LINE_CHANNEL_SECRET) {
-        this.config = {
-          lineConfig: {
-            channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
-            channelSecret: process.env.LINE_CHANNEL_SECRET
-          }
-        };
-      } else {
-        const configData = await fs.readFile('config.json', 'utf8');
-        this.config = JSON.parse(configData);
+    this.config = {
+      lineConfig: {
+        channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN || '',
+        channelSecret: process.env.LINE_CHANNEL_SECRET || ''
       }
-    } catch (error) {
-      this.config = { lineConfig: {} };
-    }
+    };
   }
 
-  async saveConfig() {
-    await fs.writeFile('config.json', JSON.stringify(this.config, null, 2));
-  }
 
 
   async detectNewProducts(currentProducts) {
@@ -442,16 +503,26 @@ class AppleTracker {
 
   async getUserRulesMessage(userId) {
     if (!this.firebaseService.initialized) {
-      const webUrl = process.env.WEB_URL || 'http://localhost:3000';
-      return `📋 您的追蹤規則\n\n⚠️  Firebase未連接，無法顯示規則\n📝 請使用網頁介面:\n${webUrl}`;
+      const liffId = process.env.LINE_LIFF_ID;
+      if (liffId) {
+        return `📋 您的追蹤規則\n\n⚠️  Firebase未連接，無法顯示個人規則\n\n📝 請透過 LINE 網頁設定個人規則:\nhttps://liff.line.me/${liffId}`;
+      } else {
+        const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+        return `📋 您的追蹤規則\n\n⚠️  Firebase未連接\n📝 請使用網頁介面:\n${webUrl}`;
+      }
     }
     
     try {
       const rules = await this.firebaseService.getUserTrackingRules(userId);
       
       if (rules.length === 0) {
-        const webUrl = process.env.WEB_URL || 'http://localhost:3000';
-        return `📋 您目前沒有設定追蹤規則\n\n📝 請使用網頁介面新增規則:\n${webUrl}`;
+        const liffId = process.env.LINE_LIFF_ID;
+        if (liffId) {
+          return `📋 您目前沒有設定追蹤規則\n\n📝 請透過 LINE 網頁設定個人規則:\nhttps://liff.line.me/${liffId}\n\n✨ 點選連結會自動識別身份`;
+        } else {
+          const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+          return `📋 您目前沒有設定追蹤規則\n\n📝 請使用網頁介面新增規則:\n${webUrl}\n\n⚠️ 建議設定 LIFF 以啟用個人規則功能`;
+        }
       }
       
       let message = `📋 您的追蹤規則 (${rules.length} 個):\n\n`;

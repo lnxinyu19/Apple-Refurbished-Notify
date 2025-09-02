@@ -220,17 +220,170 @@
             }
 
             async init() {
-                await this.initLiff();
-                if (this.isLiffReady && this.currentUser) {
-                    await this.loadUserConfig();
-                } else {
-                    await this.loadConfig(); // 降級到一般模式
+                // 檢查是否從 LINE Login 回來
+                const urlParams = new URLSearchParams(window.location.search);
+                const userParam = urlParams.get('user');
+                
+                if (userParam) {
+                    try {
+                        this.currentUser = JSON.parse(decodeURIComponent(userParam));
+                        this.isLiffReady = true; // 視為已登入
+                        await this.loadUserConfig();
+                        // 清除 URL 參數
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    } catch (error) {
+                        console.error('解析用戶資訊失敗:', error);
+                    }
                 }
+
+                if (!this.currentUser) {
+                    // 嘗試 LIFF 初始化
+                    await this.initLiff();
+                    if (this.isLiffReady && this.currentUser) {
+                        await this.loadUserConfig();
+                    } else {
+                        // 檢測環境並選擇登入方式
+                        await this.checkLoginOptions();
+                    }
+                }
+                
                 this.bindEvents();
                 this.updateUI();
                 this.checkStatus();
                 
                 setInterval(() => this.checkStatus(), 10000);
+            }
+
+            async checkLoginOptions() {
+                const [liffConfig, lineLoginConfig] = await Promise.all([
+                    fetch('/api/liff-config').then(r => r.json()),
+                    fetch('/api/line-login-config').then(r => r.json())
+                ]);
+
+                // 檢測是否在 LINE 應用內
+                const isInLineApp = this.isInLineApp();
+
+                if (isInLineApp && liffConfig.liffId) {
+                    // 在 LINE 應用內，使用 LIFF
+                    this.showLiffPrompt();
+                } else if (lineLoginConfig.channelId) {
+                    // 在一般瀏覽器，使用 LINE Login
+                    this.showLineLoginOption();
+                } else {
+                    // 沒有配置任何登入方式
+                    this.showNoLoginConfig();
+                }
+            }
+
+            isInLineApp() {
+                const userAgent = navigator.userAgent.toLowerCase();
+                return userAgent.includes('line/');
+            }
+
+            showLiffPrompt() {
+                document.body.innerHTML = `
+                    <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4">
+                        <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 text-center">
+                            <div class="mb-6">
+                                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <svg class="w-8 h-8 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM10 17l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                    </svg>
+                                </div>
+                                <h1 class="text-2xl font-bold text-gray-900 mb-2">請透過 LINE 開啟</h1>
+                                <p class="text-gray-600 mb-6">
+                                    此網頁需要透過 LINE 開啟才能自動識別您的身份並管理個人追蹤規則。
+                                </p>
+                            </div>
+                            
+                            <div class="space-y-4">
+                                <div class="text-left bg-gray-50 rounded-lg p-4">
+                                    <h3 class="font-semibold text-gray-900 mb-2">📱 使用步驟：</h3>
+                                    <ol class="text-sm text-gray-700 space-y-1">
+                                        <li>1. 加 LINE Bot 為好友</li>
+                                        <li>2. 傳送「新增規則」指令</li>
+                                        <li>3. 點選 Bot 回覆的連結</li>
+                                        <li>4. 自動識別身份並設定規則</li>
+                                    </ol>
+                                </div>
+                                
+                                <button onclick="window.location.reload()" 
+                                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors">
+                                    🔄 重新載入
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            showLineLoginOption() {
+                document.body.innerHTML = `
+                    <div class="min-h-screen bg-gradient-to-br from-green-50 to-blue-100 flex items-center justify-center px-4">
+                        <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 text-center">
+                            <div class="mb-6">
+                                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <svg class="w-8 h-8 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM10 17l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                    </svg>
+                                </div>
+                                <h1 class="text-2xl font-bold text-gray-900 mb-2">🍎 Apple 整修機追蹤器</h1>
+                                <p class="text-gray-600 mb-6">
+                                    請透過 LINE 登入以設定您的個人追蹤規則
+                                </p>
+                            </div>
+                            
+                            <div class="space-y-4">
+                                <div class="text-left bg-gray-50 rounded-lg p-4">
+                                    <h3 class="font-semibold text-gray-900 mb-2">✨ 功能特色：</h3>
+                                    <ul class="text-sm text-gray-700 space-y-1">
+                                        <li>• 自動追蹤 Apple 整修機產品</li>
+                                        <li>• 個人化的追蹤條件設定</li>
+                                        <li>• LINE 即時通知新產品</li>
+                                        <li>• 價格、規格條件篩選</li>
+                                    </ul>
+                                </div>
+                                
+                                <a href="/auth/line" 
+                                   class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-4 px-4 rounded-lg transition-colors flex items-center justify-center space-x-2 block no-underline">
+                                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.629 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
+                                    </svg>
+                                    <span>透過 LINE 登入</span>
+                                </a>
+                                
+                                <p class="text-xs text-gray-500">
+                                    登入後即可設定個人追蹤規則並接收通知
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            showNoLoginConfig() {
+                document.body.innerHTML = `
+                    <div class="min-h-screen bg-gradient-to-br from-red-50 to-orange-100 flex items-center justify-center px-4">
+                        <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 text-center">
+                            <div class="mb-6">
+                                <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <svg class="w-8 h-8 text-red-600" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM13 17h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                                    </svg>
+                                </div>
+                                <h1 class="text-2xl font-bold text-gray-900 mb-2">配置未完成</h1>
+                                <p class="text-gray-600 mb-6">
+                                    系統尚未配置 LINE 登入功能，請聯絡管理員設定相關參數。
+                                </p>
+                            </div>
+                            
+                            <button onclick="window.location.reload()" 
+                                    class="w-full bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-lg transition-colors">
+                                🔄 重新載入
+                            </button>
+                        </div>
+                    </div>
+                `;
             }
 
             async initLiff() {
@@ -274,12 +427,8 @@
             }
 
             async loadConfig() {
-                try {
-                    const response = await fetch('/api/config');
-                    this.config = await response.json();
-                } catch (error) {
-                    console.error('載入配置失敗:', error);
-                }
+                // 一般模式下不需要載入 config，所有配置都在環境變數中
+                this.config = { trackingRules: [] };
             }
 
             async loadUserConfig() {
@@ -294,9 +443,11 @@
 
             async saveConfig() {
                 try {
-                    const apiUrl = this.isLiffReady && this.currentUser 
-                        ? `/api/users/${this.currentUser.userId}/config`
-                        : '/api/config';
+                    if (!this.isLiffReady || !this.currentUser) {
+                        throw new Error('請透過 LINE 登入後再設定規則');
+                    }
+                    
+                    const apiUrl = `/api/users/${this.currentUser.userId}/config`;
                     
                     console.log('儲存配置到:', apiUrl);
                     console.log('LIFF 狀態:', { isLiffReady: this.isLiffReady, currentUser: this.currentUser });
