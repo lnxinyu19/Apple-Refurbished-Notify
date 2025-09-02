@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Apple 整修機追蹤器</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -185,6 +186,9 @@
         class AppleTrackerUI {
             constructor() {
                 this.config = { trackingRules: [] };
+                this.currentUser = null;
+                this.liffId = null; // 將從環境變數取得
+                this.isLiffReady = false;
                 this.productSpecs = {
                     'MacBook Air': {
                         chips: ['M2', 'M3', 'M4'],
@@ -216,12 +220,49 @@
             }
 
             async init() {
-                await this.loadConfig();
+                await this.initLiff();
+                if (this.isLiffReady && this.currentUser) {
+                    await this.loadUserConfig();
+                } else {
+                    await this.loadConfig(); // 降級到一般模式
+                }
                 this.bindEvents();
                 this.updateUI();
                 this.checkStatus();
                 
                 setInterval(() => this.checkStatus(), 10000);
+            }
+
+            async initLiff() {
+                try {
+                    // 首先取得 LIFF ID
+                    const response = await fetch('/api/liff-config');
+                    const liffConfig = await response.json();
+                    
+                    if (!liffConfig.liffId) {
+                        console.log('LIFF ID 未設定，使用一般模式');
+                        return;
+                    }
+
+                    await liff.init({ liffId: liffConfig.liffId });
+                    
+                    if (liff.isLoggedIn()) {
+                        const profile = await liff.getProfile();
+                        this.currentUser = {
+                            userId: profile.userId,
+                            displayName: profile.displayName,
+                            pictureUrl: profile.pictureUrl
+                        };
+                        this.isLiffReady = true;
+                        this.updateUserInfo();
+                        console.log('LIFF 初始化成功，用戶:', this.currentUser.displayName);
+                    } else {
+                        console.log('用戶未登入 LINE');
+                    }
+                } catch (error) {
+                    console.error('LIFF 初始化失敗:', error);
+                    console.log('使用一般模式');
+                }
             }
 
             bindEvents() {
@@ -241,9 +282,23 @@
                 }
             }
 
+            async loadUserConfig() {
+                try {
+                    const response = await fetch(`/api/users/${this.currentUser.userId}/config`);
+                    this.config = await response.json();
+                } catch (error) {
+                    console.error('載入用戶配置失敗:', error);
+                    this.config = { trackingRules: [] };
+                }
+            }
+
             async saveConfig() {
                 try {
-                    await fetch('/api/config', {
+                    const apiUrl = this.isLiffReady && this.currentUser 
+                        ? `/api/users/${this.currentUser.userId}/config`
+                        : '/api/config';
+                        
+                    await fetch(apiUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(this.config)
@@ -251,6 +306,22 @@
                 } catch (error) {
                     console.error('儲存配置失敗:', error);
                     alert('儲存配置失敗');
+                }
+            }
+
+            updateUserInfo() {
+                if (!this.currentUser) return;
+                
+                // 在頁面顯示用戶資訊
+                const statusBar = document.querySelector('.bg-white.shadow-sm.border-b .max-w-6xl > div');
+                if (statusBar) {
+                    const userInfo = document.createElement('div');
+                    userInfo.className = 'flex items-center space-x-2 text-sm';
+                    userInfo.innerHTML = `
+                        <img src="${this.currentUser.pictureUrl}" alt="用戶頭像" class="w-6 h-6 rounded-full">
+                        <span class="text-gray-600">歡迎，${this.currentUser.displayName}</span>
+                    `;
+                    statusBar.appendChild(userInfo);
                 }
             }
 

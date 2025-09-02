@@ -43,6 +43,59 @@ class AppleTracker {
       }
     });
 
+    // LIFF 設定端點
+    this.app.get('/api/liff-config', (req, res) => {
+      res.json({ 
+        liffId: process.env.LINE_LIFF_ID || null 
+      });
+    });
+
+    // 用戶專屬配置 API
+    this.app.get('/api/users/:userId/config', async (req, res) => {
+      try {
+        const userId = req.params.userId;
+        if (!this.firebaseService.initialized) {
+          return res.json({ trackingRules: [] });
+        }
+
+        const rules = await this.firebaseService.getUserTrackingRules(userId);
+        res.json({ trackingRules: rules });
+      } catch (error) {
+        console.error('取得用戶配置錯誤:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/users/:userId/config', async (req, res) => {
+      try {
+        const userId = req.params.userId;
+        const { trackingRules } = req.body;
+
+        if (!this.firebaseService.initialized) {
+          return res.status(503).json({ error: 'Firebase 未連接' });
+        }
+
+        // 確保用戶存在
+        await this.firebaseService.getOrCreateUser(userId);
+
+        // 清除現有規則並重新建立
+        const existingRules = await this.firebaseService.getUserTrackingRules(userId);
+        for (const rule of existingRules) {
+          await this.firebaseService.deleteTrackingRule(userId, rule.id);
+        }
+
+        // 新增新規則
+        for (const rule of trackingRules) {
+          await this.firebaseService.addTrackingRule(userId, rule);
+        }
+
+        res.json({ success: true, message: '配置已儲存' });
+      } catch (error) {
+        console.error('儲存用戶配置錯誤:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     this.app.post('/api/track/start', async (req, res) => {
       try {
         if (this.isTracking) {
@@ -331,8 +384,15 @@ class AppleTracker {
           break;
 
         case '新增規則':
-          const webUrl = process.env.WEB_URL || 'http://localhost:3000';
-          replyMessage = `📝 請使用網頁介面新增追蹤規則:\n${webUrl}\n\n個人規則功能開發中...`;
+        case '設定規則':
+        case '網頁設定':
+          const liffId = process.env.LINE_LIFF_ID;
+          if (liffId) {
+            replyMessage = `📝 請使用 LINE 網頁介面設定個人追蹤規則:\nhttps://liff.line.me/${liffId}\n\n✨ 自動識別身份，無需額外設定`;
+          } else {
+            const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+            replyMessage = `📝 請使用網頁介面新增追蹤規則:\n${webUrl}\n\n⚠️ 提醒：請先設定 LIFF ID 以便識別身份`;
+          }
           break;
           
         default:
@@ -415,7 +475,7 @@ class AppleTracker {
 
   getHelpMessage() {
     const activeProviders = this.notificationManager.getActiveProviderNames();
-    const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+    const liffId = process.env.LINE_LIFF_ID;
     
     return `🤖 Apple 翻新機追蹤 Bot\n\n` +
            `📱 可用指令:\n` +
@@ -423,12 +483,13 @@ class AppleTracker {
            `• 停止追蹤 - 停止監控\n` +
            `• 狀態 - 查看系統狀態\n` +
            `• 我的規則 - 查看個人追蹤規則\n` +
-           `• 新增規則 - 新增追蹤規則\n` +
+           `• 新增規則 - 設定個人追蹤規則\n` +
            `• 測試 - 測試Bot連接\n` +
            `• 幫助 - 顯示此訊息\n\n` +
            `📤 啟用通知方式: ${activeProviders.join(', ')}\n\n` +
-           `🔧 詳細規則管理請使用網頁:\n` +
-           `https://${webUrl}`;
+           (liffId ? 
+             `📱 個人規則設定: https://liff.line.me/${liffId}` :
+             `⚠️ 請設定 LIFF ID 以啟用個人規則功能`);
   }
 
   async scrapeProducts() {
