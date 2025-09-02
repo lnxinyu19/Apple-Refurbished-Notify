@@ -24,7 +24,6 @@
     </script>
 </head>
 <body class="bg-gray-50 min-h-screen">
-    <!-- 頂部狀態列 -->
     <div class="bg-white shadow-sm border-b">
         <div class="max-w-6xl mx-auto px-4 py-3">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
@@ -50,19 +49,15 @@
     </div>
 
     <div class="max-w-6xl mx-auto px-4 py-6">
-        <!-- 標題 -->
         <div class="text-center mb-8">
             <h1 class="text-3xl font-bold text-gray-900 mb-2">🍎 Apple 整修機追蹤器</h1>
             <p class="text-gray-600">輕鬆追蹤您想要的 Apple 整修機產品</p>
         </div>
 
-        <!-- 主要內容區域 -->
         <div class="grid lg:grid-cols-2 gap-6">
-            <!-- 左側：追蹤規則設定 -->
             <div class="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
                 <h2 class="text-lg sm:text-xl font-semibold mb-4 sm:mb-6 text-gray-900">📋 追蹤規則設定</h2>
                 
-                <!-- 新增規則表單 -->
                 <form id="ruleForm" class="space-y-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">規則名稱</label>
@@ -111,14 +106,22 @@
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">最小記憶體</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">記憶體</label>
                             <select id="minMemory" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
                                 <option value="">不限</option>
+                                <option value="4">4GB</option>
                                 <option value="8">8GB</option>
                                 <option value="16">16GB</option>
+                                <option value="18">18GB</option>
+                                <option value="24">24GB</option>
                                 <option value="32">32GB</option>
+                                <option value="36">36GB</option>
                                 <option value="64">64GB</option>
+                                <option value="96">96GB</option>
                                 <option value="128">128GB</option>
+                                <option value="192">192GB</option>
+                                <option value="768">768GB</option>
+                                <option value="1500">1.5TB</option>
                             </select>
                         </div>
 
@@ -148,7 +151,6 @@
                     </button>
                 </form>
 
-                <!-- 規則列表 -->
                 <div class="mt-6 sm:mt-8">
                     <h3 class="text-base sm:text-lg font-medium text-gray-900 mb-3 sm:mb-4">目前規則</h3>
                     <div id="rulesList" class="space-y-3 max-h-64 sm:max-h-80 overflow-y-auto">
@@ -161,7 +163,6 @@
                 </div>
             </div>
 
-            <!-- 右側：產品測試與結果 -->
             <div class="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 space-y-3 sm:space-y-0">
                     <h2 class="text-lg sm:text-xl font-semibold text-gray-900">🔍 產品測試</h2>
@@ -175,7 +176,6 @@
                 <div id="testResults" class="hidden">
                     <h3 class="text-base sm:text-lg font-medium text-gray-900 mb-3 sm:mb-4">測試結果</h3>
                     <div id="productsList" class="space-y-3 sm:space-y-4 max-h-80 sm:max-h-96 overflow-y-auto">
-                        <!-- 動態載入產品 -->
                     </div>
                 </div>
             </div>
@@ -187,7 +187,7 @@
             constructor() {
                 this.config = { trackingRules: [] };
                 this.currentUser = null;
-                this.liffId = null; // 將從環境變數取得
+                this.liffId = null;
                 this.isLiffReady = false;
                 this.productSpecs = {
                     'MacBook Air': {
@@ -197,7 +197,7 @@
                     },
                     'MacBook Pro': {
                         chips: ['M2 Pro', 'M2 Max', 'M3', 'M3 Pro', 'M3 Max', 'M4', 'M4 Pro', 'M4 Max'],
-                        memory: [8, 16, 18, 32, 36, 64, 128],
+                        memory: [8, 16, 18, 24, 32, 36, 64, 128],
                         colors: ['銀色', '太空灰色', '太空黑色']
                     },
                     'Mac Studio': {
@@ -227,9 +227,8 @@
                 if (userParam) {
                     try {
                         this.currentUser = JSON.parse(decodeURIComponent(userParam));
-                        this.isLiffReady = true; // 視為已登入
+                        this.isLiffReady = true;
                         await this.loadUserConfig();
-                        // 清除 URL 參數
                         window.history.replaceState({}, document.title, window.location.pathname);
                     } catch (error) {
                         console.error('解析用戶資訊失敗:', error);
@@ -237,23 +236,21 @@
                 }
 
                 if (!this.currentUser) {
-                    // 嘗試 LIFF 初始化
                     await this.initLiff();
                     if (this.isLiffReady && this.currentUser) {
                         await this.loadUserConfig();
                     } else {
-                        // 檢測環境並選擇登入方式
                         await this.checkLoginOptions();
-                        return; // 如果需要登入，就不要繼續初始化
+                        return;
                     }
                 }
                 
                 this.bindEvents();
                 this.updateUI();
-                this.updateUserInfo(); // 顯示用戶資訊
+                this.updateUserInfo();
                 this.checkStatus();
                 
-                setInterval(() => this.checkStatus(), 5 * 60 * 1000); // 5分鐘檢查一次
+                setInterval(() => this.checkStatus(), 5 * 60 * 1000);
             }
 
             async checkLoginOptions() {
@@ -262,17 +259,13 @@
                     fetch('/api/line-login-config').then(r => r.json())
                 ]);
 
-                // 檢測是否在 LINE 應用內
                 const isInLineApp = this.isInLineApp();
 
                 if (isInLineApp && liffConfig.liffId) {
-                    // 在 LINE 應用內，使用 LIFF
                     this.showLiffPrompt();
                 } else if (lineLoginConfig.channelId) {
-                    // 在一般瀏覽器，使用 LINE Login
                     this.showLineLoginOption();
                 } else {
-                    // 沒有配置任何登入方式
                     this.showNoLoginConfig();
                 }
             }
@@ -390,13 +383,11 @@
 
             async initLiff() {
                 try {
-                    // 首先取得 LIFF ID
                     const response = await fetch('/api/liff-config');
                     const liffConfig = await response.json();
                     
                     if (!liffConfig.liffId) {
-                        console.log('LIFF ID 未設定，使用一般模式');
-                        return;
+                            return;
                     }
 
                     await liff.init({ liffId: liffConfig.liffId });
@@ -410,13 +401,10 @@
                         };
                         this.isLiffReady = true;
                         this.updateUserInfo();
-                        console.log('LIFF 初始化成功，用戶:', this.currentUser.displayName);
                     } else {
-                        console.log('用戶未登入 LINE');
                     }
                 } catch (error) {
                     console.error('LIFF 初始化失敗:', error);
-                    console.log('使用一般模式');
                 }
             }
 
@@ -429,7 +417,6 @@
             }
 
             async loadConfig() {
-                // 一般模式下不需要載入 config，所有配置都在環境變數中
                 this.config = { trackingRules: [] };
             }
 
@@ -450,10 +437,6 @@
                     }
                     
                     const apiUrl = `/api/users/${this.currentUser.userId}/config`;
-                    
-                    console.log('儲存配置到:', apiUrl);
-                    console.log('LIFF 狀態:', { isLiffReady: this.isLiffReady, currentUser: this.currentUser });
-                    console.log('儲存的配置:', this.config);
                         
                     const response = await fetch(apiUrl, {
                         method: 'POST',
@@ -466,7 +449,6 @@
                     }
                     
                     const result = await response.json();
-                    console.log('儲存結果:', result);
                 } catch (error) {
                     console.error('儲存配置失敗:', error);
                     alert('儲存配置失敗: ' + error.message);
@@ -476,11 +458,9 @@
             updateUserInfo() {
                 if (!this.currentUser) return;
                 
-                // 檢查是否已經顯示用戶資訊
                 const existingUserInfo = document.querySelector('.user-info');
                 if (existingUserInfo) return;
                 
-                // 在頁面顯示用戶資訊
                 const statusBar = document.querySelector('.bg-white.shadow-sm.border-b .max-w-6xl > div');
                 if (statusBar) {
                     const userInfo = document.createElement('div');
@@ -529,19 +509,16 @@
                     submitBtn.textContent = '🔄 新增中...';
                     submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
                     
-                    // 確保 trackingRules 陣列存在
                     if (!this.config.trackingRules) {
                         this.config.trackingRules = [];
                     }
                     
-                    // 檢查必填欄位
                     const ruleName = document.getElementById('ruleName').value.trim();
                     if (!ruleName) {
                         alert('請輸入規則名稱');
                         return;
                     }
                     
-                    // 生成唯一的 ID
                     const ruleId = 'rule_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                     
                     const rule = {
@@ -557,14 +534,12 @@
                         }
                     };
 
-                    // 清理空值
                     Object.keys(rule.filters).forEach(key => {
                         if (rule.filters[key] === undefined) {
                             delete rule.filters[key];
                         }
                     });
 
-                    console.log('新增規則:', rule);
                     
                     this.config.trackingRules.push(rule);
                     await this.saveConfig();
@@ -584,7 +559,6 @@
             }
 
             async deleteRule(ruleId, buttonElement = null) {
-                console.log('執行刪除規則:', ruleId);
                 
                 if (!this.isLiffReady || !this.currentUser) {
                     alert('請透過 LINE 登入後再刪除規則');
@@ -610,9 +584,7 @@
                     }
 
                     const result = await response.json();
-                    console.log('刪除結果:', result);
 
-                    // 從本地配置中移除規則
                     this.config.trackingRules = this.config.trackingRules.filter(rule => rule.id !== ruleId);
                     this.updateUI();
                     
@@ -631,7 +603,6 @@
             }
 
             async toggleRule(ruleId, buttonElement = null) {
-                console.log('執行切換規則:', ruleId);
                 
                 // 設置loading狀態
                 let originalText = '';
@@ -646,7 +617,6 @@
                     const rule = this.config.trackingRules.find(r => r.id === ruleId);
                     if (rule) {
                         rule.enabled = !rule.enabled;
-                        console.log('規則狀態已切換為:', rule.enabled);
                         await this.saveConfig();
                         this.updateUI();
                     } else {
@@ -704,22 +674,16 @@
                     </div>
                 `).join('');
                 
-                // 等待DOM更新後綁定事件
                 setTimeout(() => {
-                    console.log('綁定按鈕事件...');
                     
-                    // 綁定切換按鈕事件
                     const toggleBtns = container.querySelectorAll('.toggle-rule-btn');
-                    console.log('找到切換按鈕:', toggleBtns.length);
                     toggleBtns.forEach(btn => {
                         btn.addEventListener('click', (e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             
-                            // 確保獲取正確的元素和 rule-id
-                            const target = e.currentTarget; // 使用 currentTarget 而不是 target
+                            const target = e.currentTarget;
                             const ruleId = target.getAttribute('data-rule-id');
-                            console.log('切換規則:', ruleId, 'target:', target);
                             
                             if (ruleId) {
                                 this.toggleRule(ruleId, target);
@@ -729,18 +693,14 @@
                         });
                     });
                     
-                    // 綁定刪除按鈕事件
                     const deleteBtns = container.querySelectorAll('.delete-rule-btn');
-                    console.log('找到刪除按鈕:', deleteBtns.length);
                     deleteBtns.forEach(btn => {
                         btn.addEventListener('click', (e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             
-                            // 確保獲取正確的元素和 rule-id
-                            const target = e.currentTarget; // 使用 currentTarget 而不是 target
+                            const target = e.currentTarget;
                             const ruleId = target.getAttribute('data-rule-id');
-                            console.log('刪除規則:', ruleId, 'target:', target);
                             
                             if (ruleId) {
                                 if (confirm('確定要刪除這個追蹤規則嗎？')) {
@@ -770,13 +730,11 @@
                 const memorySelect = document.getElementById('minMemory');
                 const colorSelect = document.getElementById('color');
 
-                // 重置所有選項
                 chipSelect.innerHTML = '<option value="">不限</option>';
                 memorySelect.innerHTML = '<option value="">不限</option>';
                 colorSelect.innerHTML = '<option value="">不限</option>';
 
                 if (!productType || !this.productSpecs[productType]) {
-                    // 如果沒選產品類型，顯示所有選項
                     ['M2', 'M2 Pro', 'M2 Max', 'M3', 'M3 Pro', 'M3 Max', 'M4', 'M4 Pro', 'M4 Max', 'M4 Ultra'].forEach(chip => {
                         chipSelect.innerHTML += `<option value="${chip}">${chip}</option>`;
                     });
@@ -791,17 +749,14 @@
 
                 const specs = this.productSpecs[productType];
 
-                // 更新晶片選項
                 specs.chips.forEach(chip => {
                     chipSelect.innerHTML += `<option value="${chip}">${chip}</option>`;
                 });
 
-                // 更新記憶體選項
                 specs.memory.forEach(memory => {
                     memorySelect.innerHTML += `<option value="${memory}">${memory}GB</option>`;
                 });
 
-                // 更新顏色選項
                 specs.colors.forEach(color => {
                     colorSelect.innerHTML += `<option value="${color}">${color}</option>`;
                 });
@@ -885,7 +840,6 @@
                         </div>
                     `;
                     
-                    // 如果有規則結果，顯示每個規則的匹配情況
                     if (result.ruleResults && result.ruleResults.length > 0) {
                         htmlContent += '<div class="mb-6">';
                         htmlContent += '<h4 class="font-medium text-gray-900 mb-3">各規則匹配結果:</h4>';
@@ -905,7 +859,6 @@
                         htmlContent += '</div>';
                     }
                     
-                    // 顯示產品列表
                     const products = result.products || result.summary || [];
                     if (products.length === 0) {
                         htmlContent += '<div class="text-center py-8 text-gray-500">沒有找到符合條件的產品</div>';

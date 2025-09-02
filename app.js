@@ -424,9 +424,6 @@ class AppleTracker {
     try {
       switch (messageText.toLowerCase()) {
         case '/start':
-        case 'start':
-        case '/begin':
-        case '/track':
           if (this.isTracking) {
             replyMessage = '⚠️ 系統已在追蹤中';
           } else {
@@ -436,9 +433,6 @@ class AppleTracker {
           break;
           
         case '/stop':
-        case 'stop':
-        case '/pause':
-        case '/halt':
           if (!this.isTracking) {
             replyMessage = '⚠️ 系統目前未在追蹤';
           } else {
@@ -448,36 +442,22 @@ class AppleTracker {
           break;
           
         case '/status':
-        case 'status':
-        case '/info':
-        case '/state':
           replyMessage = await this.getStatusMessage();
           break;
           
         case '/help':
-        case 'help':
-        case '/commands':
-        case '/menu':
           replyMessage = this.getHelpMessage();
           break;
           
         case '/test':
-        case 'test':
-        case '/ping':
           replyMessage = '🧪 測試通知\n✅ 系統運作正常！';
           break;
 
         case '/rules':
-        case 'rules':
-        case '/list':
           replyMessage = await this.getUserRulesMessage(userId);
           break;
 
         case '/add':
-        case '/setup':
-        case '/configure':
-        case 'add rule':
-        case 'setup':
           const liffId = process.env.LINE_LIFF_ID;
           if (liffId) {
             replyMessage = `📝 請使用 LINE 網頁介面設定個人追蹤規則:\nhttps://liff.line.me/${liffId}\n\n✨ 自動識別身份，無需額外設定`;
@@ -488,10 +468,6 @@ class AppleTracker {
           break;
 
         case '/delete':
-        case '/remove':
-        case '/del':
-        case 'delete rule':
-        case 'remove rule':
           replyMessage = await this.getDeleteRulesMessage(userId);
           break;
           
