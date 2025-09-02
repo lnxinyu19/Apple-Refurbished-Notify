@@ -214,6 +214,28 @@ class FirebaseService {
     }));
   }
 
+  // 系統狀態管理
+  async getSystemState() {
+    try {
+      const doc = await this.db.collection('system').doc('tracking_state').get();
+      return doc.exists ? doc.data() : { isTracking: false };
+    } catch (error) {
+      console.error('取得系統狀態錯誤:', error);
+      return { isTracking: false };
+    }
+  }
+
+  async saveSystemState(isTracking) {
+    try {
+      await this.db.collection('system').doc('tracking_state').set({
+        isTracking,
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (error) {
+      console.error('儲存系統狀態錯誤:', error);
+    }
+  }
+
   // 統計資料
   async getSystemStats() {
     try {

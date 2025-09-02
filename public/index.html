@@ -180,6 +180,10 @@
                 </div>
             </div>
         </div>
+        
+        <footer class="text-center mt-8 py-4 text-xs text-gray-400">
+            <div id="versionInfo">v1.0.0</div>
+        </footer>
     </div>
 
     <script>
@@ -248,6 +252,7 @@
                 this.bindEvents();
                 this.updateUI();
                 this.updateUserInfo();
+                this.loadVersion();
                 this.checkStatus();
                 
                 setInterval(() => this.checkStatus(), 5 * 60 * 1000);
@@ -473,6 +478,16 @@
                 }
             }
 
+            async loadVersion() {
+                try {
+                    const response = await fetch('/api/version');
+                    const versionData = await response.json();
+                    document.getElementById('versionInfo').textContent = `v${versionData.version}`;
+                } catch (error) {
+                    console.error('載入版本資訊失敗:', error);
+                }
+            }
+
             async checkStatus() {
                 try {
                     const response = await fetch('/api/track/status');
@@ -483,7 +498,7 @@
                     
                     if (status.isTracking) {
                         statusDot.className = 'w-3 h-3 bg-green-400 rounded-full animate-pulse';
-                        statusText.textContent = '追蹤中';
+                        statusText.textContent = status.autoRestarted ? '追蹤中 (自動重啟)' : '追蹤中';
                         document.getElementById('startBtn').classList.add('hidden');
                         document.getElementById('stopBtn').classList.remove('hidden');
                     } else {

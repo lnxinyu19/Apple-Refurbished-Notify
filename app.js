@@ -29,6 +29,14 @@ class AppleTracker {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
 
+    this.app.get('/api/version', (req, res) => {
+      const pkg = require('./package.json');
+      res.json({ 
+        version: pkg.version,
+        name: pkg.name
+      });
+    });
+
 
     // LIFF 設定端點
     this.app.get('/api/liff-config', (req, res) => {
@@ -199,17 +207,21 @@ class AppleTracker {
       }
     });
 
-    this.app.post('/api/track/stop', (req, res) => {
-      this.stopTracking();
+    this.app.post('/api/track/stop', async (req, res) => {
+      await this.stopTracking();
       res.json({ success: true, message: '停止追蹤' });
     });
 
     this.app.get('/api/track/status', async (req, res) => {
       const stats = await this.firebaseService.getSystemStats();
+      const systemState = this.firebaseService.initialized ? 
+        await this.firebaseService.getSystemState() : { isTracking: false };
+      
       res.json({ 
         isTracking: this.isTracking,
         rulesCount: stats.activeRules,
-        usersCount: stats.totalUsers
+        usersCount: stats.totalUsers,
+        autoRestarted: systemState.isTracking && this.isTracking
       });
     });
 
@@ -262,6 +274,14 @@ class AppleTracker {
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
+    // 檢查並自動重啟追蹤
+    if (firebaseReady) {
+      const systemState = await this.firebaseService.getSystemState();
+      if (systemState.isTracking && !this.isTracking) {
+        console.log('🔄 檢測到服務重啟，自動重新啟動追蹤...');
+        await this.startTracking();
+      }
+    }
 
     console.log('🚀 Apple 整修機追蹤器已初始化');
     if (!firebaseReady) {
@@ -436,7 +456,7 @@ class AppleTracker {
           if (!this.isTracking) {
             replyMessage = '⚠️ 系統目前未在追蹤';
           } else {
-            this.stopTracking();
+            await this.stopTracking();
             replyMessage = '⏹️ 已停止追蹤';
           }
           break;
@@ -862,6 +882,10 @@ class AppleTracker {
     this.isTracking = true;
     console.log('🎯 開始追蹤產品...');
     
+    if (this.firebaseService.initialized) {
+      await this.firebaseService.saveSystemState(true);
+    }
+    
     await this.trackProducts();
     
     this.trackingInterval = setInterval(async () => {
@@ -869,12 +893,17 @@ class AppleTracker {
     }, 60 * 60 * 1000);
   }
 
-  stopTracking() {
+  async stopTracking() {
     this.isTracking = false;
     if (this.trackingInterval) {
       clearInterval(this.trackingInterval);
       this.trackingInterval = null;
     }
+    
+    if (this.firebaseService.initialized) {
+      await this.firebaseService.saveSystemState(false);
+    }
+    
     console.log('⏹️ 停止追蹤');
   }
 
@@ -994,7 +1023,7 @@ class AppleTracker {
   }
 
   async cleanup() {
-    this.stopTracking();
+    await this.stopTracking();
     if (this.browser) {
       await this.browser.close();
     }
