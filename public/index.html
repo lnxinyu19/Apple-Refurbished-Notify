@@ -185,6 +185,33 @@
         class AppleTrackerUI {
             constructor() {
                 this.config = { trackingRules: [] };
+                this.productSpecs = {
+                    'MacBook Air': {
+                        chips: ['M2', 'M3', 'M4'],
+                        memory: [8, 16, 24, 32],
+                        colors: ['銀色', '太空灰色', '星光色', '午夜色']
+                    },
+                    'MacBook Pro': {
+                        chips: ['M2 Pro', 'M2 Max', 'M3', 'M3 Pro', 'M3 Max', 'M4', 'M4 Pro', 'M4 Max'],
+                        memory: [8, 16, 18, 32, 36, 64, 128],
+                        colors: ['銀色', '太空灰色', '太空黑色']
+                    },
+                    'Mac Studio': {
+                        chips: ['M2 Max', 'M2 Ultra', 'M4 Max', 'M4 Ultra'],
+                        memory: [32, 64, 128, 192],
+                        colors: ['銀色']
+                    },
+                    'Mac mini': {
+                        chips: ['M2', 'M2 Pro', 'M4', 'M4 Pro'],
+                        memory: [8, 16, 24, 32, 64],
+                        colors: ['銀色']
+                    },
+                    'iPad': {
+                        chips: ['M2', 'M4'],
+                        memory: [8, 16, 32],
+                        colors: ['銀色', '太空灰色', '天藍色', '粉紅色']
+                    }
+                };
                 this.init();
             }
 
@@ -202,6 +229,7 @@
                 document.getElementById('startBtn').addEventListener('click', () => this.startTracking());
                 document.getElementById('stopBtn').addEventListener('click', () => this.stopTracking());
                 document.getElementById('testBtn').addEventListener('click', () => this.testProducts());
+                document.getElementById('productType').addEventListener('change', (e) => this.updateProductOptions(e.target.value));
             }
 
             async loadConfig() {
@@ -409,6 +437,48 @@
                 if (filters.maxPrice) conditions.push(`價格: ≤NT$${filters.maxPrice.toLocaleString()}`);
                 
                 return conditions.length > 0 ? conditions.join(' | ') : '無限制';
+            }
+
+            updateProductOptions(productType) {
+                const chipSelect = document.getElementById('chip');
+                const memorySelect = document.getElementById('minMemory');
+                const colorSelect = document.getElementById('color');
+
+                // 重置所有選項
+                chipSelect.innerHTML = '<option value="">不限</option>';
+                memorySelect.innerHTML = '<option value="">不限</option>';
+                colorSelect.innerHTML = '<option value="">不限</option>';
+
+                if (!productType || !this.productSpecs[productType]) {
+                    // 如果沒選產品類型，顯示所有選項
+                    ['M2', 'M2 Pro', 'M2 Max', 'M3', 'M3 Pro', 'M3 Max', 'M4', 'M4 Pro', 'M4 Max', 'M4 Ultra'].forEach(chip => {
+                        chipSelect.innerHTML += `<option value="${chip}">${chip}</option>`;
+                    });
+                    [8, 16, 24, 32, 36, 64, 128, 192].forEach(memory => {
+                        memorySelect.innerHTML += `<option value="${memory}">${memory}GB</option>`;
+                    });
+                    ['銀色', '太空灰色', '太空黑色', '星光色', '午夜色', '天藍色', '粉紅色'].forEach(color => {
+                        colorSelect.innerHTML += `<option value="${color}">${color}</option>`;
+                    });
+                    return;
+                }
+
+                const specs = this.productSpecs[productType];
+
+                // 更新晶片選項
+                specs.chips.forEach(chip => {
+                    chipSelect.innerHTML += `<option value="${chip}">${chip}</option>`;
+                });
+
+                // 更新記憶體選項
+                specs.memory.forEach(memory => {
+                    memorySelect.innerHTML += `<option value="${memory}">${memory}GB</option>`;
+                });
+
+                // 更新顏色選項
+                specs.colors.forEach(color => {
+                    colorSelect.innerHTML += `<option value="${color}">${color}</option>`;
+                });
             }
 
             async startTracking() {

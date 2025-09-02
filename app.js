@@ -12,17 +12,16 @@ class AppleTracker {
     this.app = express();
     this.port = process.env.PORT || 3000;
     this.browser = null;
-    this.config = { lineConfig: {} }; // 只保留LINE配置
+    this.config = { lineConfig: {} };
     this.isTracking = false;
     this.trackingInterval = null;
-    this.firebaseService = new FirebaseService(); // Firebase服務
-    this.notificationManager = new NotificationManager(); // 通知管理器
+    this.firebaseService = new FirebaseService();
+    this.notificationManager = new NotificationManager();
     
     this.setupServer();
   }
 
   setupServer() {
-    // 設定靜態檔案
     this.app.use(express.static('public'));
     this.app.use(express.json());
 
@@ -30,7 +29,6 @@ class AppleTracker {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
 
-    // API 路由
     this.app.get('/api/config', (req, res) => {
       res.json(this.config);
     });
@@ -72,7 +70,6 @@ class AppleTracker {
       });
     });
 
-    // 測試產品爬取端點（前端需要）
     this.app.get('/api/products/test', async (req, res) => {
       try {
         const allProducts = await this.scrapeProducts();
@@ -80,7 +77,7 @@ class AppleTracker {
         res.json({
           message: `找到 ${allProducts.length} 個產品`,
           total: allProducts.length,
-          products: allProducts // 顯示所有產品，不再限制10個
+          products: allProducts
         });
         
       } catch (error) {
@@ -89,17 +86,14 @@ class AppleTracker {
       }
     });
 
-    // 正式LINE webhook端點
     this.app.post('/webhook/line', express.json(), async (req, res) => {
       try {
-        console.log('📨 處理LINE事件:', req.body.events?.length || 0, '個事件');
         
         if (!req.body.events || req.body.events.length === 0) {
           return res.status(200).json([]);
         }
         
         const results = await Promise.all(req.body.events.map(this.handleLineEvent.bind(this)));
-        console.log('✅ LINE事件處理完成');
         res.status(200).json(results);
         
       } catch (error) {
@@ -111,19 +105,15 @@ class AppleTracker {
   }
 
   async init() {
-    // 載入配置
     await this.loadConfig();
     
-    // 初始化Firebase（允許失敗）
     const firebaseReady = await this.firebaseService.initialize();
     
-    // 初始化通知管理器
     await this.notificationManager.initialize({
       line: this.config.lineConfig,
       email: this.config.emailConfig || { enabled: false }
     });
     
-    // 初始化瀏覽器
     this.browser = await puppeteer.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -139,7 +129,6 @@ class AppleTracker {
 
   async loadConfig() {
     try {
-      // 優先使用環境變數
       if (process.env.LINE_CHANNEL_ACCESS_TOKEN && process.env.LINE_CHANNEL_SECRET) {
         this.config = {
           lineConfig: {
@@ -148,12 +137,10 @@ class AppleTracker {
           }
         };
       } else {
-        // 回退到本地配置文件
         const configData = await fs.readFile('config.json', 'utf8');
         this.config = JSON.parse(configData);
       }
     } catch (error) {
-      // 如果檔案不存在，使用預設配置
       this.config = { lineConfig: {} };
     }
   }
@@ -165,30 +152,24 @@ class AppleTracker {
 
   async detectNewProducts(currentProducts) {
     try {
-      // 如果Firebase未連接，則直接返回空陣列（避免每次都通知相同產品）
       if (!this.firebaseService.initialized) {
-        console.log('⚠️  Firebase未連接，跳過新產品檢測');
         return [];
       }
 
       const previousProducts = await this.firebaseService.getProductHistory();
       const newProducts = [];
       
-      console.log(`🔍 檢查新產品：當前 ${currentProducts.length} 個產品，歷史 ${previousProducts.size} 個產品`);
       
       for (const product of currentProducts) {
         if (!previousProducts.has(product.url)) {
           newProducts.push(product);
-          console.log(`🆕 發現新產品: ${product.name}`);
         }
       }
       
-      console.log(`✅ 檢測完成：發現 ${newProducts.length} 個新產品`);
       return newProducts;
       
     } catch (error) {
       console.error('❌ 新產品檢測失敗:', error.message);
-      // 發生錯誤時返回空陣列，避免重複通知
       return [];
     }
   }
@@ -202,7 +183,6 @@ class AppleTracker {
       { productIds }
     );
 
-    // 記錄通知歷史到Firebase
     for (const result of results.results) {
       if (result.success) {
         await this.firebaseService.saveNotification(
@@ -224,9 +204,8 @@ class AppleTracker {
 
   async createBatchMessages(newProducts) {
     const messages = [];
-    const productsPerMessage = 10; // 每個訊息顯示10個產品
+    const productsPerMessage = 10;
     
-    // 分批處理產品
     for (let i = 0; i < newProducts.length; i += productsPerMessage) {
       const batch = newProducts.slice(i, i + productsPerMessage);
       const batchNumber = Math.floor(i / productsPerMessage) + 1;
@@ -234,7 +213,6 @@ class AppleTracker {
       
       let message;
       if (i === 0) {
-        // 第一個訊息包含總數信息
         message = `🆕 發現 ${newProducts.length} 個新翻新產品！\n`;
         if (totalBatches > 1) {
           message += `📄 第 ${batchNumber}/${totalBatches} 批\n\n`;
@@ -242,16 +220,13 @@ class AppleTracker {
           message += '\n';
         }
       } else {
-        // 後續訊息
         message = `📄 第 ${batchNumber}/${totalBatches} 批產品：\n\n`;
       }
       
-      // 添加產品信息，使用更簡潔的格式
       for (let j = 0; j < batch.length; j++) {
         const product = batch[j];
         const globalIndex = i + j + 1;
         
-        // 簡化產品名稱
         const shortName = product.name
           .replace(/整修品.*$/, '')
           .replace(/Apple\s*/gi, '')
@@ -260,7 +235,6 @@ class AppleTracker {
         message += `${globalIndex}. ${shortName}\n`;
         message += `💰 ${product.price}\n`;
         
-        // 簡化URL顯示
         if (product.url) {
           message += `🔗 ${product.url}\n`;
         }
@@ -275,25 +249,22 @@ class AppleTracker {
 
   async shortenUrl(url) {
     try {
-      // 使用 TinyURL API
       const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`);
       const shortUrl = await response.text();
       
-      // 檢查是否成功縮短
       if (shortUrl.startsWith('https://tinyurl.com/')) {
         return shortUrl;
       }
       
-      return url; // 失敗時返回原網址
+      return url;
     } catch (error) {
       console.error('URL縮短失敗:', error);
-      return url; // 失敗時返回原網址
+      return url;
     }
   }
 
 
   async handleLineEvent(event) {
-    // 處理加入好友事件（靜默註冊）
     if (event.type === 'follow') {
       const userId = event.source.userId;
       await this.registerUser(userId);
@@ -308,7 +279,6 @@ class AppleTracker {
     const messageText = event.message.text.trim();
     
     
-    // 註冊使用者
     await this.registerUser(userId);
     
     let replyMessage = '';
@@ -368,7 +338,6 @@ class AppleTracker {
           replyMessage = '❓ 不認識的指令\n請輸入「幫助」查看可用指令';
       }
       
-      // 回覆訊息
       if (replyMessage) {
         const lineProvider = this.notificationManager.getProvider('line');
         if (lineProvider) {
@@ -378,7 +347,6 @@ class AppleTracker {
       
     } catch (error) {
       console.error('處理LINE事件錯誤:', error);
-      // 發送錯誤訊息給使用者
       const lineProvider = this.notificationManager.getProvider('line');
       if (lineProvider) {
         await lineProvider.replyMessage(event.replyToken, '❌ 系統發生錯誤，請稍後再試');
@@ -390,7 +358,6 @@ class AppleTracker {
 
   async registerUser(userId) {
     if (!this.firebaseService.initialized) {
-      console.log('⚠️  Firebase未連接，無法註冊用戶');
       return;
     }
     await this.firebaseService.getOrCreateUser(userId);
@@ -467,7 +434,6 @@ class AppleTracker {
     const page = await this.browser.newPage();
     
     try {
-      // 爬取台灣可用的 Apple 翻新產品類別
       const urls = [
         'https://www.apple.com/tw/shop/refurbished/mac',
         'https://www.apple.com/tw/shop/refurbished/ipad',
@@ -484,15 +450,12 @@ class AppleTracker {
           const products = await page.evaluate((currentUrl) => {
             const productData = [];
             
-            // 直接尋找所有整修機產品連結
             const links = document.querySelectorAll('a[href*="/shop/product/"]');
             
-            // 過濾出整修機產品連結
             const refurbishedLinks = Array.from(links).filter(a => {
               const href = a.href.toLowerCase();
               const text = a.textContent.toLowerCase();
               
-              // 必須是整修機產品
               const isRefurbished = href.includes('refurbished') || text.includes('整修品') || text.includes('整修');
               
               if (isRefurbished && text.trim().length > 0) {
@@ -501,12 +464,10 @@ class AppleTracker {
               return false;
             });
             
-            // 從每個產品連結提取資訊
             refurbishedLinks.forEach((link, index) => {
               try {
                 const name = link.textContent.trim();
                 
-                // 尋找價格
                 let price = '';
                 let currentElement = link.parentElement;
                 let searchDepth = 0;
@@ -522,7 +483,6 @@ class AppleTracker {
                   searchDepth++;
                 }
                 
-                // 尋找圖片
                 let image = '';
                 const parentContainer = link.closest('div');
                 if (parentContainer) {
@@ -546,7 +506,6 @@ class AppleTracker {
                 }
                 
               } catch (e) {
-                // 靜默跳過錯誤
               }
             });
             
@@ -560,7 +519,6 @@ class AppleTracker {
         }
       }
 
-      // 解析產品規格
       const productsWithSpecs = allProducts.map(product => ({
         ...product,
         specs: this.parseSpecs(product.name, product.description, product.category)
@@ -590,7 +548,6 @@ class AppleTracker {
       category: category || 'Other'
     };
 
-    // 產品類型 - 支援所有 Apple 產品
     if (normalizedName.includes('MacBook Air')) specs.productType = 'MacBook Air';
     else if (normalizedName.includes('MacBook Pro')) specs.productType = 'MacBook Pro';
     else if (normalizedName.includes('Mac Studio')) specs.productType = 'Mac Studio';
@@ -602,11 +559,9 @@ class AppleTracker {
     else if (normalizedName.includes('iPad')) specs.productType = 'iPad';
     else if (normalizedName.includes('Apple TV')) specs.productType = 'Apple TV';
 
-    // 螢幕尺寸
     const sizeMatch = normalizedName.match(/(\d+)\s*吋/);
     if (sizeMatch) specs.screenSize = sizeMatch[1] + '吋';
 
-    // 晶片 - 改進匹配邏輯
     const chipPatterns = [
       /Apple (M\d+(?:\s+(?:Pro|Max|Ultra))?)/,
       /(M\d+(?:\s+(?:Pro|Max|Ultra))?)\s*晶片/,
@@ -621,7 +576,6 @@ class AppleTracker {
       }
     }
 
-    // 記憶體
     const memoryPatterns = [
       /(\d+)GB\s*統一記憶體/,
       /(\d+)GB\s*記憶體/,
@@ -636,7 +590,6 @@ class AppleTracker {
       }
     }
 
-    // 儲存
     const storagePatterns = [
       /(\d+(?:\.\d+)?)TB/,
       /(\d+)GB.*SSD/,
@@ -655,7 +608,6 @@ class AppleTracker {
       }
     }
 
-    // 顏色
     const colors = ['銀色', '太空灰色', '太空黑色', '星光色', '午夜色', '天藍色'];
     for (const color of colors) {
       if (normalizedName.includes(color)) {
@@ -693,10 +645,8 @@ class AppleTracker {
     this.isTracking = true;
     console.log('🎯 開始追蹤產品...');
     
-    // 立即執行一次
     await this.trackProducts();
     
-    // 每60分鐘執行一次
     this.trackingInterval = setInterval(async () => {
       await this.trackProducts();
     }, 60 * 60 * 1000);
@@ -713,22 +663,16 @@ class AppleTracker {
 
   async trackProducts() {
     try {
-      console.log('🎯 開始執行產品追蹤...');
       const startTime = Date.now();
       
       const allProducts = await this.scrapeProducts();
-      console.log(`📊 爬取完成：共找到 ${allProducts.length} 個產品`);
       
-      // 檢測新產品
       const newProducts = await this.detectNewProducts(allProducts);
       
-      // 如果沒有新產品，直接結束但仍要更新產品歷史
       if (newProducts.length === 0) {
-        console.log('📋 沒有發現新產品，更新產品歷史記錄');
         if (this.firebaseService.initialized) {
           await this.firebaseService.saveProductHistory(allProducts);
         }
-        console.log(`⏱️ 追蹤完成，耗時 ${Date.now() - startTime}ms`);
         return {
           totalProducts: allProducts.length,
           newProducts: 0,
@@ -737,9 +681,7 @@ class AppleTracker {
         };
       }
       
-      // 獲取所有用戶及其追蹤規則
       const activeUsers = await this.firebaseService.getActiveUsers();
-      console.log(`👥 活躍用戶數：${activeUsers.length}`);
       
       const allNewMatches = [];
       let notifiedUsersCount = 0;
@@ -757,19 +699,15 @@ class AppleTracker {
           }
         }
         
-        // 去重該用戶的新匹配產品
         userNewMatches = userNewMatches.filter((product, index, self) => 
           index === self.findIndex(p => p.url === product.url)
         );
         
-        // 只有在有新匹配產品時才發送通知
         if (userNewMatches.length > 0) {
-          console.log(`📨 為用戶 ${user.lineUserId.slice(-4)} 發送 ${userNewMatches.length} 個新產品通知`);
           const messages = await this.formatNewProductMessage(userNewMatches);
           if (messages && messages.length > 0) {
             const productIds = userNewMatches.map(p => this.firebaseService.getProductId(p.url));
             
-            // 發送所有分批訊息
             for (let i = 0; i < messages.length; i++) {
               const message = messages[i];
               try {
@@ -779,15 +717,13 @@ class AppleTracker {
                   { productIds, batchInfo: { current: i + 1, total: messages.length } }
                 );
                 
-                // 記錄成功的通知
                 for (const result of results) {
                   if (result.success) {
                     await this.firebaseService.saveNotification(user.lineUserId, message, productIds);
-                    if (i === 0) notifiedUsersCount++; // 只在第一批計算用戶數
+                    if (i === 0) notifiedUsersCount++;
                   }
                 }
                 
-                // 分批發送間加入小延遲，避免觸發LINE API限制
                 if (i < messages.length - 1) {
                   await new Promise(resolve => setTimeout(resolve, 1000));
                 }
@@ -801,14 +737,10 @@ class AppleTracker {
         allNewMatches.push(...userNewMatches);
       }
       
-      // 更新產品歷史記錄到Firebase
       if (this.firebaseService.initialized) {
         await this.firebaseService.saveProductHistory(allProducts);
-        console.log('💾 產品歷史記錄已更新');
       }
       
-      console.log(`⏱️ 追蹤完成，耗時 ${Date.now() - startTime}ms`);
-      console.log(`📈 統計：總產品 ${allProducts.length} | 新產品 ${newProducts.length} | 新匹配 ${allNewMatches.length} | 通知用戶 ${notifiedUsersCount}`);
       
       return {
         totalProducts: allProducts.length,
@@ -833,14 +765,12 @@ class AppleTracker {
     this.app.listen(this.port, () => {
       console.log(`🌐 伺服器啟動於 http://localhost:${this.port}`);
       
-      // 自動開啟瀏覽器
       const platform = process.platform;
       const command = platform === 'darwin' ? 'open' : 
                      platform === 'win32' ? 'start' : 'xdg-open';
       
       exec(`${command} http://localhost:${this.port}`, (error) => {
         if (error) {
-          console.log('請手動開啟瀏覽器到 http://localhost:3000');
         }
       });
     });
@@ -854,11 +784,9 @@ class AppleTracker {
   }
 }
 
-// 啟動應用
 const tracker = new AppleTracker();
 tracker.start();
 
-// 處理程序終止
 process.on('SIGINT', async () => {
   console.log('\n正在關閉...');
   await tracker.cleanup();
