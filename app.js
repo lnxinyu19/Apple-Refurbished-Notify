@@ -151,15 +151,25 @@ class AppleTracker {
         // 確保用戶存在
         await this.firebaseService.getOrCreateUser(userId);
 
-        // 清除現有規則並重新建立
+        // 取得現有規則
         const existingRules = await this.firebaseService.getUserTrackingRules(userId);
+        const existingRuleIds = new Set(existingRules.map(r => r.id));
+
+        // 只刪除不在新規則列表中的規則
+        const newRuleIds = new Set(trackingRules.map(r => r.id));
         for (const rule of existingRules) {
-          await this.firebaseService.deleteTrackingRule(userId, rule.id);
+          if (!newRuleIds.has(rule.id)) {
+            await this.firebaseService.deleteTrackingRule(userId, rule.id);
+          }
         }
 
-        // 新增新規則
+        // 新增或更新規則
         for (const rule of trackingRules) {
-          await this.firebaseService.addTrackingRule(userId, rule);
+          if (existingRuleIds.has(rule.id)) {
+            await this.firebaseService.updateTrackingRule(userId, rule.id, rule);
+          } else {
+            await this.firebaseService.addTrackingRule(userId, rule);
+          }
         }
 
         res.json({ success: true, message: '配置已儲存' });
