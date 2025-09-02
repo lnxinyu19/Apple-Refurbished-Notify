@@ -517,49 +517,57 @@
                 }
             }
 
-            addRule(e) {
+            async addRule(e) {
                 e.preventDefault();
                 
-                // 確保 trackingRules 陣列存在
-                if (!this.config.trackingRules) {
-                    this.config.trackingRules = [];
-                }
-                
-                // 檢查必填欄位
-                const ruleName = document.getElementById('ruleName').value.trim();
-                if (!ruleName) {
-                    alert('請輸入規則名稱');
-                    return;
-                }
-                
-                // 生成唯一的 ID
-                const ruleId = 'rule_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                
-                const rule = {
-                    id: ruleId,
-                    name: ruleName,
-                    enabled: true,
-                    filters: {
-                        productType: document.getElementById('productType').value || undefined,
-                        chip: document.getElementById('chip').value || undefined,
-                        minMemory: document.getElementById('minMemory').value ? parseInt(document.getElementById('minMemory').value) : undefined,
-                        color: document.getElementById('color').value || undefined,
-                        maxPrice: document.getElementById('maxPrice').value ? parseInt(document.getElementById('maxPrice').value) : undefined
-                    }
-                };
-
-                // 清理空值
-                Object.keys(rule.filters).forEach(key => {
-                    if (rule.filters[key] === undefined) {
-                        delete rule.filters[key];
-                    }
-                });
-
-                console.log('新增規則:', rule);
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                const originalText = submitBtn.textContent;
                 
                 try {
+                    // 設置loading狀態
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = '🔄 新增中...';
+                    submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
+                    
+                    // 確保 trackingRules 陣列存在
+                    if (!this.config.trackingRules) {
+                        this.config.trackingRules = [];
+                    }
+                    
+                    // 檢查必填欄位
+                    const ruleName = document.getElementById('ruleName').value.trim();
+                    if (!ruleName) {
+                        alert('請輸入規則名稱');
+                        return;
+                    }
+                    
+                    // 生成唯一的 ID
+                    const ruleId = 'rule_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    
+                    const rule = {
+                        id: ruleId,
+                        name: ruleName,
+                        enabled: true,
+                        filters: {
+                            productType: document.getElementById('productType').value || undefined,
+                            chip: document.getElementById('chip').value || undefined,
+                            minMemory: document.getElementById('minMemory').value ? parseInt(document.getElementById('minMemory').value) : undefined,
+                            color: document.getElementById('color').value || undefined,
+                            maxPrice: document.getElementById('maxPrice').value ? parseInt(document.getElementById('maxPrice').value) : undefined
+                        }
+                    };
+
+                    // 清理空值
+                    Object.keys(rule.filters).forEach(key => {
+                        if (rule.filters[key] === undefined) {
+                            delete rule.filters[key];
+                        }
+                    });
+
+                    console.log('新增規則:', rule);
+                    
                     this.config.trackingRules.push(rule);
-                    this.saveConfig();
+                    await this.saveConfig();
                     this.updateUI();
                     
                     document.getElementById('ruleForm').reset();
@@ -567,15 +575,29 @@
                 } catch (error) {
                     console.error('新增規則失敗:', error);
                     alert('新增規則失敗: ' + error.message);
+                } finally {
+                    // 恢復按鈕狀態
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
+                    submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
                 }
             }
 
-            async deleteRule(ruleId) {
+            async deleteRule(ruleId, buttonElement = null) {
                 console.log('執行刪除規則:', ruleId);
                 
                 if (!this.isLiffReady || !this.currentUser) {
                     alert('請透過 LINE 登入後再刪除規則');
                     return;
+                }
+
+                // 設置loading狀態
+                let originalText = '';
+                if (buttonElement) {
+                    originalText = buttonElement.textContent;
+                    buttonElement.disabled = true;
+                    buttonElement.textContent = '🔄 刪除中...';
+                    buttonElement.classList.add('opacity-75', 'cursor-not-allowed');
                 }
 
                 try {
@@ -598,19 +620,49 @@
                 } catch (error) {
                     console.error('刪除規則失敗:', error);
                     alert('刪除規則失敗: ' + error.message);
+                } finally {
+                    // 恢復按鈕狀態
+                    if (buttonElement) {
+                        buttonElement.disabled = false;
+                        buttonElement.textContent = originalText;
+                        buttonElement.classList.remove('opacity-75', 'cursor-not-allowed');
+                    }
                 }
             }
 
-            toggleRule(ruleId) {
+            async toggleRule(ruleId, buttonElement = null) {
                 console.log('執行切換規則:', ruleId);
-                const rule = this.config.trackingRules.find(r => r.id === ruleId);
-                if (rule) {
-                    rule.enabled = !rule.enabled;
-                    console.log('規則狀態已切換為:', rule.enabled);
-                    this.saveConfig();
-                    this.updateUI();
-                } else {
-                    console.error('未找到要切換的規則:', ruleId);
+                
+                // 設置loading狀態
+                let originalText = '';
+                if (buttonElement) {
+                    originalText = buttonElement.textContent;
+                    buttonElement.disabled = true;
+                    buttonElement.textContent = '🔄 處理中...';
+                    buttonElement.classList.add('opacity-75', 'cursor-not-allowed');
+                }
+
+                try {
+                    const rule = this.config.trackingRules.find(r => r.id === ruleId);
+                    if (rule) {
+                        rule.enabled = !rule.enabled;
+                        console.log('規則狀態已切換為:', rule.enabled);
+                        await this.saveConfig();
+                        this.updateUI();
+                    } else {
+                        console.error('未找到要切換的規則:', ruleId);
+                        alert('未找到指定的規則');
+                    }
+                } catch (error) {
+                    console.error('切換規則失敗:', error);
+                    alert('切換規則失敗: ' + error.message);
+                } finally {
+                    // 恢復按鈕狀態
+                    if (buttonElement) {
+                        buttonElement.disabled = false;
+                        buttonElement.textContent = originalText;
+                        buttonElement.classList.remove('opacity-75', 'cursor-not-allowed');
+                    }
                 }
             }
 
@@ -670,7 +722,7 @@
                             console.log('切換規則:', ruleId, 'target:', target);
                             
                             if (ruleId) {
-                                this.toggleRule(ruleId);
+                                this.toggleRule(ruleId, target);
                             } else {
                                 console.error('無法獲取 rule-id');
                             }
@@ -692,7 +744,7 @@
                             
                             if (ruleId) {
                                 if (confirm('確定要刪除這個追蹤規則嗎？')) {
-                                    this.deleteRule(ruleId);
+                                    this.deleteRule(ruleId, target);
                                 }
                             } else {
                                 console.error('無法獲取 rule-id');
@@ -756,7 +808,14 @@
             }
 
             async startTracking() {
+                const btn = document.getElementById('startBtn');
+                const originalText = btn.textContent;
+                
                 try {
+                    btn.disabled = true;
+                    btn.textContent = '🔄 啟動中...';
+                    btn.classList.add('opacity-75', 'cursor-not-allowed');
+                    
                     const response = await fetch('/api/track/start', { method: 'POST' });
                     const result = await response.json();
                     
@@ -768,11 +827,22 @@
                 } catch (error) {
                     console.error('啟動追蹤失敗:', error);
                     alert('啟動追蹤失敗');
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    btn.classList.remove('opacity-75', 'cursor-not-allowed');
                 }
             }
 
             async stopTracking() {
+                const btn = document.getElementById('stopBtn');
+                const originalText = btn.textContent;
+                
                 try {
+                    btn.disabled = true;
+                    btn.textContent = '🔄 停止中...';
+                    btn.classList.add('opacity-75', 'cursor-not-allowed');
+                    
                     const response = await fetch('/api/track/stop', { method: 'POST' });
                     const result = await response.json();
                     
@@ -782,6 +852,10 @@
                 } catch (error) {
                     console.error('停止追蹤失敗:', error);
                     alert('停止追蹤失敗');
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    btn.classList.remove('opacity-75', 'cursor-not-allowed');
                 }
             }
 
