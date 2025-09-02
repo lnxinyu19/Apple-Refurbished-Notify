@@ -54,7 +54,7 @@ class EmailNotificationProvider extends NotificationProvider {
     }
 
     try {
-      const subject = metadata.subject || '🍎 Apple 翻新機通知';
+      const subject = metadata.subject || '🍎 Apple 整修機通知';
       
       const mailOptions = {
         from: this.fromEmail,
@@ -89,12 +89,12 @@ class EmailNotificationProvider extends NotificationProvider {
     
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #007AFF;">🍎 Apple 翻新機通知</h2>
+        <h2 style="color: #007AFF;">🍎 Apple 整修機通知</h2>
         <div style="background: #f5f5f5; padding: 15px; border-radius: 8px;">
           ${htmlMessage}
         </div>
         <p style="color: #666; font-size: 12px; margin-top: 20px;">
-          此通知由 Apple 翻新機追蹤系統自動發送
+          此通知由 Apple 整修機追蹤系統自動發送
         </p>
       </div>
     `;

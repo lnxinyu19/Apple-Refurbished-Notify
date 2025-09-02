@@ -23,7 +23,7 @@
 1. 在 LINE Login Channel 中，點選 "LIFF" tab
 2. 點選 "Add" 建立新的LIFF app
 3. 設定：
-   - LIFF app name: Apple 翻新機設定
+   - LIFF app name: Apple 整修機設定
    - Size: Full
    - Endpoint URL: https://你的網域/ （你的網頁位址）
    - Scope: profile

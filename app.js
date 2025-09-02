@@ -333,7 +333,7 @@ class AppleTracker {
       
       let message;
       if (i === 0) {
-        message = `🆕 發現 ${newProducts.length} 個新翻新產品！\n`;
+        message = `🆕 發現 ${newProducts.length} 個新整修產品！\n`;
         if (totalBatches > 1) {
           message += `📄 第 ${batchNumber}/${totalBatches} 批\n\n`;
         } else {
@@ -414,7 +414,7 @@ class AppleTracker {
             replyMessage = '⚠️ 系統已在追蹤中';
           } else {
             await this.startTracking();
-            replyMessage = '✅ 開始追蹤 Apple 翻新產品\n📱 有新品時會立即通知您';
+            replyMessage = '✅ 開始追蹤 Apple 整修產品\n📱 有新品時會立即通知您';
           }
           break;
           
@@ -562,7 +562,7 @@ class AppleTracker {
     const activeProviders = this.notificationManager.getActiveProviderNames();
     const liffId = process.env.LINE_LIFF_ID;
     
-    return `🤖 Apple 翻新機追蹤 Bot\n\n` +
+    return `🤖 Apple 整修機追蹤 Bot\n\n` +
            `📱 可用指令:\n` +
            `• /start - 開始監控新品\n` +
            `• /stop - 停止監控\n` +

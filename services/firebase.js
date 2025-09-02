@@ -141,31 +141,43 @@ class FirebaseService {
     
     snapshot.docs.forEach(doc => {
       const data = doc.data();
-      // 使用產品基礎 URL 作為 key
-      const productKey = this.getProductKey(data.url);
+      // 使用已儲存的 productKey，如果沒有則生成一個
+      const productKey = data.productKey || this.getProductKey(data.url);
       products.set(productKey, data);
     });
     
+    console.log(`從 Firebase 讀取 ${snapshot.docs.length} 個文檔，生成 ${products.size} 個唯一產品 Key`);
     return products;
   }
 
   async saveProductHistory(products) {
-    const batch = this.db.batch();
     const timestamp = admin.firestore.FieldValue.serverTimestamp();
     
-    products.forEach(product => {
-      // 使用產品基礎 URL 作為文檔 ID
-      const productKey = this.getProductKey(product.url);
-      const productRef = this.db.collection('products').doc(this.getProductId(productKey));
-      batch.set(productRef, {
-        ...product,
-        productKey: productKey, // 額外儲存產品基礎 URL
-        lastSeen: timestamp,
-        updatedAt: timestamp
-      }, { merge: true });
-    });
+    // Firestore 批次寫入限制為 500 個操作，所以分批處理
+    const batchSize = 450; // 留一些安全餘量
     
-    await batch.commit();
+    for (let i = 0; i < products.length; i += batchSize) {
+      const batch = this.db.batch();
+      const batchProducts = products.slice(i, i + batchSize);
+      
+      console.log(`儲存產品批次 ${Math.floor(i/batchSize) + 1}: ${batchProducts.length} 個產品`);
+      
+      batchProducts.forEach(product => {
+        // 使用產品基礎 URL 作為文檔 ID
+        const productKey = this.getProductKey(product.url);
+        const productRef = this.db.collection('products').doc(this.getProductId(productKey));
+        batch.set(productRef, {
+          ...product,
+          productKey: productKey, // 額外儲存產品基礎 URL
+          lastSeen: timestamp,
+          updatedAt: timestamp
+        }, { merge: true });
+      });
+      
+      await batch.commit();
+    }
+    
+    console.log(`✅ 總共儲存了 ${products.length} 個產品`);
   }
 
   // 獲取產品的唯一標識符（移除 URL 中的動態參數）
@@ -174,7 +186,9 @@ class FirebaseService {
   }
 
   getProductId(url) {
-    return url.split('/').pop().replace(/[^a-zA-Z0-9]/g, '_');
+    // 使用完整的 URL 路徑來生成唯一 ID，避免重複
+    const urlPath = url.replace(/^https?:\/\/[^\/]+/, ''); // 移除 domain
+    return urlPath.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
   }
 
   // 通知歷史
