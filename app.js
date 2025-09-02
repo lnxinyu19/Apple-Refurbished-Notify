@@ -164,16 +164,33 @@ class AppleTracker {
 
 
   async detectNewProducts(currentProducts) {
-    const previousProducts = await this.firebaseService.getProductHistory();
-    const newProducts = [];
-    
-    for (const product of currentProducts) {
-      if (!previousProducts.has(product.url)) {
-        newProducts.push(product);
+    try {
+      // 如果Firebase未連接，則直接返回空陣列（避免每次都通知相同產品）
+      if (!this.firebaseService.initialized) {
+        console.log('⚠️  Firebase未連接，跳過新產品檢測');
+        return [];
       }
+
+      const previousProducts = await this.firebaseService.getProductHistory();
+      const newProducts = [];
+      
+      console.log(`🔍 檢查新產品：當前 ${currentProducts.length} 個產品，歷史 ${previousProducts.size} 個產品`);
+      
+      for (const product of currentProducts) {
+        if (!previousProducts.has(product.url)) {
+          newProducts.push(product);
+          console.log(`🆕 發現新產品: ${product.name}`);
+        }
+      }
+      
+      console.log(`✅ 檢測完成：發現 ${newProducts.length} 個新產品`);
+      return newProducts;
+      
+    } catch (error) {
+      console.error('❌ 新產品檢測失敗:', error.message);
+      // 發生錯誤時返回空陣列，避免重複通知
+      return [];
     }
-    
-    return newProducts;
   }
 
   async notifyAllUsers(message, productIds = []) {
@@ -649,10 +666,10 @@ class AppleTracker {
     // 立即執行一次
     await this.trackProducts();
     
-    // 每30分鐘執行一次
+    // 每60分鐘執行一次
     this.trackingInterval = setInterval(async () => {
       await this.trackProducts();
-    }, 30 * 60 * 1000);
+    }, 60 * 60 * 1000);
   }
 
   stopTracking() {
@@ -666,14 +683,36 @@ class AppleTracker {
 
   async trackProducts() {
     try {
+      console.log('🎯 開始執行產品追蹤...');
+      const startTime = Date.now();
+      
       const allProducts = await this.scrapeProducts();
+      console.log(`📊 爬取完成：共找到 ${allProducts.length} 個產品`);
       
       // 檢測新產品
       const newProducts = await this.detectNewProducts(allProducts);
       
+      // 如果沒有新產品，直接結束但仍要更新產品歷史
+      if (newProducts.length === 0) {
+        console.log('📋 沒有發現新產品，更新產品歷史記錄');
+        if (this.firebaseService.initialized) {
+          await this.firebaseService.saveProductHistory(allProducts);
+        }
+        console.log(`⏱️ 追蹤完成，耗時 ${Date.now() - startTime}ms`);
+        return {
+          totalProducts: allProducts.length,
+          newProducts: 0,
+          totalNewMatches: 0,
+          notifiedUsers: 0
+        };
+      }
+      
       // 獲取所有用戶及其追蹤規則
       const activeUsers = await this.firebaseService.getActiveUsers();
+      console.log(`👥 活躍用戶數：${activeUsers.length}`);
+      
       const allNewMatches = [];
+      let notifiedUsersCount = 0;
       
       for (const user of activeUsers) {
         const userRules = await this.firebaseService.getUserTrackingRules(user.lineUserId);
@@ -693,8 +732,9 @@ class AppleTracker {
           index === self.findIndex(p => p.url === product.url)
         );
         
-        // 發送個人通知
+        // 只有在有新匹配產品時才發送通知
         if (userNewMatches.length > 0) {
+          console.log(`📨 為用戶 ${user.lineUserId.slice(-4)} 發送 ${userNewMatches.length} 個新產品通知`);
           const message = await this.formatNewProductMessage(userNewMatches);
           if (message) {
             const productIds = userNewMatches.map(p => this.firebaseService.getProductId(p.url));
@@ -708,6 +748,7 @@ class AppleTracker {
             for (const result of results) {
               if (result.success) {
                 await this.firebaseService.saveNotification(user.lineUserId, message, productIds);
+                notifiedUsersCount++;
               }
             }
           }
@@ -717,17 +758,28 @@ class AppleTracker {
       }
       
       // 更新產品歷史記錄到Firebase
-      await this.firebaseService.saveProductHistory(allProducts);
+      if (this.firebaseService.initialized) {
+        await this.firebaseService.saveProductHistory(allProducts);
+        console.log('💾 產品歷史記錄已更新');
+      }
+      
+      console.log(`⏱️ 追蹤完成，耗時 ${Date.now() - startTime}ms`);
+      console.log(`📈 統計：總產品 ${allProducts.length} | 新產品 ${newProducts.length} | 新匹配 ${allNewMatches.length} | 通知用戶 ${notifiedUsersCount}`);
       
       return {
         totalProducts: allProducts.length,
         newProducts: newProducts.length,
         totalNewMatches: allNewMatches.length,
-        notifiedUsers: activeUsers.length
+        notifiedUsers: notifiedUsersCount
       };
     } catch (error) {
-      console.error('追蹤錯誤:', error);
-      return [];
+      console.error('❌ 追蹤錯誤:', error);
+      return {
+        totalProducts: 0,
+        newProducts: 0,
+        totalNewMatches: 0,
+        notifiedUsers: 0
+      };
     }
   }
 
