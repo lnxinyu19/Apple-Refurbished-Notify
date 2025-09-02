@@ -23,25 +23,7 @@ npm start
 ```
 
 ### 2. 設定追蹤條件
-開啟 http://applerefurbishednotify.zeabur.app 用網頁設定，或建立 `config.json`：
-
-```json
-{
-  "trackingRules": [
-    {
-      "name": "我要的MacBook Pro",
-      "enabled": true,
-      "filters": {
-        "productType": "MacBook Pro",
-        "chip": "M4 Pro",
-        "minMemory": 16,
-        "color": "太空黑色",
-        "maxPrice": 80000
-      }
-    }
-  ]
-}
-```
+開啟 http://applerefurbishednotify.zeabur.app 網頁設定
 
 ### 3. 設定通知
 - LINE Bot 通知：參考 `LINE_SETUP.md`
