@@ -476,11 +476,15 @@
             updateUserInfo() {
                 if (!this.currentUser) return;
                 
+                // 檢查是否已經顯示用戶資訊
+                const existingUserInfo = document.querySelector('.user-info');
+                if (existingUserInfo) return;
+                
                 // 在頁面顯示用戶資訊
                 const statusBar = document.querySelector('.bg-white.shadow-sm.border-b .max-w-6xl > div');
                 if (statusBar) {
                     const userInfo = document.createElement('div');
-                    userInfo.className = 'flex items-center space-x-2 text-sm';
+                    userInfo.className = 'flex items-center space-x-2 text-sm user-info';
                     userInfo.innerHTML = `
                         <img src="${this.currentUser.pictureUrl}" alt="用戶頭像" class="w-6 h-6 rounded-full">
                         <span class="text-gray-600">歡迎，${this.currentUser.displayName}</span>
