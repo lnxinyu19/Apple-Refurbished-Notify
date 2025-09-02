@@ -80,7 +80,7 @@ class AppleTracker {
         res.json({
           message: `找到 ${allProducts.length} 個產品`,
           total: allProducts.length,
-          products: allProducts.slice(0, 10)
+          products: allProducts // 顯示所有產品，不再限制10個
         });
         
       } catch (error) {
@@ -219,28 +219,58 @@ class AppleTracker {
   async formatNewProductMessage(newProducts) {
     if (newProducts.length === 0) return null;
     
-    // LINE訊息限制，顯示更多產品
-    const maxProducts = Math.min(newProducts.length, 10);
-    const displayProducts = newProducts.slice(0, maxProducts);
+    return await this.createBatchMessages(newProducts);
+  }
+
+  async createBatchMessages(newProducts) {
+    const messages = [];
+    const productsPerMessage = 10; // 每個訊息顯示10個產品
     
-    let message = `🆕 發現 ${newProducts.length} 個新翻新產品！\n\n`;
-    
-    for (let i = 0; i < displayProducts.length; i++) {
-      const product = displayProducts[i];
-      // 簡化產品名稱（移除冗餘描述）
-      const shortName = product.name.replace(/整修品.*$/, '').trim();
-      const shortUrl = await this.shortenUrl(product.url);
+    // 分批處理產品
+    for (let i = 0; i < newProducts.length; i += productsPerMessage) {
+      const batch = newProducts.slice(i, i + productsPerMessage);
+      const batchNumber = Math.floor(i / productsPerMessage) + 1;
+      const totalBatches = Math.ceil(newProducts.length / productsPerMessage);
       
-      message += `${i + 1}. ${shortName}\n`;
-      message += `💰 ${product.price}\n`;
-      message += `🔗 ${shortUrl}\n\n`;
+      let message;
+      if (i === 0) {
+        // 第一個訊息包含總數信息
+        message = `🆕 發現 ${newProducts.length} 個新翻新產品！\n`;
+        if (totalBatches > 1) {
+          message += `📄 第 ${batchNumber}/${totalBatches} 批\n\n`;
+        } else {
+          message += '\n';
+        }
+      } else {
+        // 後續訊息
+        message = `📄 第 ${batchNumber}/${totalBatches} 批產品：\n\n`;
+      }
+      
+      // 添加產品信息，使用更簡潔的格式
+      for (let j = 0; j < batch.length; j++) {
+        const product = batch[j];
+        const globalIndex = i + j + 1;
+        
+        // 簡化產品名稱
+        const shortName = product.name
+          .replace(/整修品.*$/, '')
+          .replace(/Apple\s*/gi, '')
+          .trim();
+        
+        message += `${globalIndex}. ${shortName}\n`;
+        message += `💰 ${product.price}\n`;
+        
+        // 簡化URL顯示
+        if (product.url) {
+          message += `🔗 ${product.url}\n`;
+        }
+        message += '\n';
+      }
+      
+      messages.push(message.trim());
     }
     
-    if (newProducts.length > maxProducts) {
-      message += `📱 還有 ${newProducts.length - maxProducts} 個產品`;
-    }
-    
-    return message;
+    return messages;
   }
 
   async shortenUrl(url) {
@@ -430,7 +460,7 @@ class AppleTracker {
            `• 幫助 - 顯示此訊息\n\n` +
            `📤 啟用通知方式: ${activeProviders.join(', ')}\n\n` +
            `🔧 詳細規則管理請使用網頁:\n` +
-           `${webUrl}`;
+           `https://${webUrl}`;
   }
 
   async scrapeProducts() {
@@ -735,20 +765,34 @@ class AppleTracker {
         // 只有在有新匹配產品時才發送通知
         if (userNewMatches.length > 0) {
           console.log(`📨 為用戶 ${user.lineUserId.slice(-4)} 發送 ${userNewMatches.length} 個新產品通知`);
-          const message = await this.formatNewProductMessage(userNewMatches);
-          if (message) {
+          const messages = await this.formatNewProductMessage(userNewMatches);
+          if (messages && messages.length > 0) {
             const productIds = userNewMatches.map(p => this.firebaseService.getProductId(p.url));
-            const results = await this.notificationManager.sendNotification(
-              user, 
-              message, 
-              { productIds }
-            );
             
-            // 記錄成功的通知
-            for (const result of results) {
-              if (result.success) {
-                await this.firebaseService.saveNotification(user.lineUserId, message, productIds);
-                notifiedUsersCount++;
+            // 發送所有分批訊息
+            for (let i = 0; i < messages.length; i++) {
+              const message = messages[i];
+              try {
+                const results = await this.notificationManager.sendNotification(
+                  user, 
+                  message, 
+                  { productIds, batchInfo: { current: i + 1, total: messages.length } }
+                );
+                
+                // 記錄成功的通知
+                for (const result of results) {
+                  if (result.success) {
+                    await this.firebaseService.saveNotification(user.lineUserId, message, productIds);
+                    if (i === 0) notifiedUsersCount++; // 只在第一批計算用戶數
+                  }
+                }
+                
+                // 分批發送間加入小延遲，避免觸發LINE API限制
+                if (i < messages.length - 1) {
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+              } catch (error) {
+                console.error(`❌ 發送第${i+1}批訊息失敗:`, error.message);
               }
             }
           }
