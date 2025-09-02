@@ -102,12 +102,12 @@ class FirebaseService {
   // 追蹤規則管理
   async getUserTrackingRules(lineUserId) {
     const rulesRef = this.db.collection('users').doc(lineUserId).collection('trackingRules');
-    const snapshot = await rulesRef.where('enabled', '==', true).get();
+    const snapshot = await rulesRef.get();
     
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    }));
+    })).filter(rule => rule.enabled !== false);
   }
 
   async addTrackingRule(lineUserId, rule) {
@@ -117,8 +117,13 @@ class FirebaseService {
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
 
-    const docRef = await this.db.collection('users').doc(lineUserId).collection('trackingRules').add(ruleData);
-    return docRef.id;
+    if (rule.id) {
+      await this.db.collection('users').doc(lineUserId).collection('trackingRules').doc(rule.id).set(ruleData);
+      return rule.id;
+    } else {
+      const docRef = await this.db.collection('users').doc(lineUserId).collection('trackingRules').add(ruleData);
+      return docRef.id;
+    }
   }
 
   async updateTrackingRule(lineUserId, ruleId, updates) {
