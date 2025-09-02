@@ -99,18 +99,54 @@ class FirebaseService {
     });
   }
 
+  // 系統狀態管理
+  async getSystemState() {
+    try {
+      const doc = await this.db.collection('system').doc('state').get();
+      return doc.exists ? doc.data() : null;
+    } catch (error) {
+      console.error('獲取系統狀態失敗:', error);
+      return null;
+    }
+  }
+
+  async saveSystemState(state) {
+    try {
+      await this.db.collection('system').doc('state').set({
+        ...state,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (error) {
+      console.error('保存系統狀態失敗:', error);
+    }
+  }
+
   // 追蹤規則管理
   async getUserTrackingRules(lineUserId) {
+    console.log(`[DEBUG] 開始獲取用戶 ${lineUserId} 的追蹤規則`);
     const rulesRef = this.db.collection('users').doc(lineUserId).collection('trackingRules');
     const snapshot = await rulesRef.get();
     
-    return snapshot.docs.map(doc => ({
+    const allRules = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    })).filter(rule => rule.enabled !== false);
+    }));
+    
+    console.log(`[DEBUG] Firebase 原始規則數量: ${allRules.length}`);
+    allRules.forEach(rule => {
+      console.log(`[DEBUG] 規則 ID: ${rule.id}, enabled: ${rule.enabled}, 內容:`, rule);
+    });
+    
+    const filteredRules = allRules.filter(rule => rule.enabled !== false);
+    console.log(`[DEBUG] 過濾後規則數量: ${filteredRules.length}`);
+    
+    return filteredRules;
   }
 
   async addTrackingRule(lineUserId, rule) {
+    console.log(`[DEBUG] 開始添加追蹤規則 - 用戶: ${lineUserId}`);
+    console.log(`[DEBUG] 輸入規則:`, rule);
+    
     const ruleData = {
       ...rule,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -118,10 +154,14 @@ class FirebaseService {
     };
 
     if (rule.id) {
+      console.log(`[DEBUG] 使用現有 ID: ${rule.id}, 執行 set 操作`);
       await this.db.collection('users').doc(lineUserId).collection('trackingRules').doc(rule.id).set(ruleData);
+      console.log(`[DEBUG] set 操作完成，返回 ID: ${rule.id}`);
       return rule.id;
     } else {
+      console.log(`[DEBUG] 沒有提供 ID，執行 add 操作`);
       const docRef = await this.db.collection('users').doc(lineUserId).collection('trackingRules').add(ruleData);
+      console.log(`[DEBUG] add 操作完成，生成新 ID: ${docRef.id}`);
       return docRef.id;
     }
   }
@@ -136,7 +176,20 @@ class FirebaseService {
   }
 
   async deleteTrackingRule(lineUserId, ruleId) {
-    await this.db.collection('users').doc(lineUserId).collection('trackingRules').doc(ruleId).delete();
+    console.log(`[DEBUG] 開始刪除追蹤規則 - 用戶: ${lineUserId}, 規則 ID: ${ruleId}`);
+    
+    // 先檢查規則是否存在
+    const ruleRef = this.db.collection('users').doc(lineUserId).collection('trackingRules').doc(ruleId);
+    const doc = await ruleRef.get();
+    
+    if (!doc.exists) {
+      console.log(`[DEBUG] 規則不存在: ${ruleId}`);
+      throw new Error(`規則 ${ruleId} 不存在`);
+    }
+    
+    console.log(`[DEBUG] 找到規則，準備刪除:`, doc.data());
+    await ruleRef.delete();
+    console.log(`[DEBUG] 規則刪除完成: ${ruleId}`);
   }
 
   // 產品歷史管理

@@ -607,47 +607,19 @@
                 } catch (error) {
                     console.error('刪除規則失敗:', error);
                     alert('刪除規則失敗: ' + error.message);
-                } finally {
-                    // 恢復按鈕狀態
-                    if (buttonElement) {
-                        buttonElement.disabled = false;
-                        buttonElement.textContent = originalText;
-                        buttonElement.classList.remove('opacity-75', 'cursor-not-allowed');
-                    }
                 }
             }
 
-            async toggleRule(ruleId, buttonElement = null) {
-                
-                // 設置loading狀態
-                let originalText = '';
-                if (buttonElement) {
-                    originalText = buttonElement.textContent;
-                    buttonElement.disabled = true;
-                    buttonElement.textContent = '🔄 處理中...';
-                    buttonElement.classList.add('opacity-75', 'cursor-not-allowed');
-                }
-
-                try {
-                    const rule = this.config.trackingRules.find(r => r.id === ruleId);
-                    if (rule) {
-                        rule.enabled = !rule.enabled;
-                        await this.saveConfig();
-                        this.updateUI();
-                    } else {
-                        console.error('未找到要切換的規則:', ruleId);
-                        alert('未找到指定的規則');
-                    }
-                } catch (error) {
-                    console.error('切換規則失敗:', error);
-                    alert('切換規則失敗: ' + error.message);
-                } finally {
-                    // 恢復按鈕狀態
-                    if (buttonElement) {
-                        buttonElement.disabled = false;
-                        buttonElement.textContent = originalText;
-                        buttonElement.classList.remove('opacity-75', 'cursor-not-allowed');
-                    }
+            async toggleRule(ruleId) {
+                console.log('執行切換規則:', ruleId);
+                const rule = this.config.trackingRules.find(r => r.id === ruleId);
+                if (rule) {
+                    rule.enabled = !rule.enabled;
+                    console.log('規則狀態已切換為:', rule.enabled);
+                    await this.saveConfig();
+                    this.updateUI();
+                } else {
+                    console.error('未找到要切換的規則:', ruleId);
                 }
             }
 
@@ -693,7 +665,7 @@
                     
                     const toggleBtns = container.querySelectorAll('.toggle-rule-btn');
                     toggleBtns.forEach(btn => {
-                        btn.addEventListener('click', (e) => {
+                        btn.addEventListener('click', async (e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             
@@ -701,7 +673,7 @@
                             const ruleId = target.getAttribute('data-rule-id');
                             
                             if (ruleId) {
-                                this.toggleRule(ruleId, target);
+                                await this.toggleRule(ruleId);
                             } else {
                                 console.error('無法獲取 rule-id');
                             }
