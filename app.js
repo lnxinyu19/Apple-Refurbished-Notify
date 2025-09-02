@@ -273,9 +273,10 @@ class AppleTracker {
       const previousProducts = await this.firebaseService.getProductHistory();
       const newProducts = [];
       
-      
       for (const product of currentProducts) {
-        if (!previousProducts.has(product.url)) {
+        // 使用產品基礎 URL（移除 fnode 參數）來比較
+        const productKey = this.getProductKey(product.url);
+        if (!previousProducts.has(productKey)) {
           newProducts.push(product);
         }
       }
@@ -286,6 +287,11 @@ class AppleTracker {
       console.error('❌ 新產品檢測失敗:', error.message);
       return [];
     }
+  }
+
+  // 獲取產品的唯一標識符（移除 URL 中的動態參數）
+  getProductKey(url) {
+    return url.split('?')[0]; // 移除查詢參數，只保留基礎 URL
   }
 
   async notifyAllUsers(message, productIds = []) {
@@ -400,64 +406,72 @@ class AppleTracker {
     
     try {
       switch (messageText.toLowerCase()) {
-        case '開始追蹤':
+        case '/start':
         case 'start':
-        case '開始':
+        case '/begin':
+        case '/track':
           if (this.isTracking) {
-            replyMessage = '⚠️ 系統已在追蹤中';
+            replyMessage = '⚠️ System is already tracking';
           } else {
             await this.startTracking();
-            replyMessage = '✅ 開始追蹤 Apple 翻新產品\n📱 有新品時會立即通知您';
+            replyMessage = '✅ Started tracking Apple refurbished products\n📱 You will be notified when new items are available';
           }
           break;
           
-        case '停止追蹤':
+        case '/stop':
         case 'stop':
-        case '停止':
+        case '/pause':
+        case '/halt':
           if (!this.isTracking) {
-            replyMessage = '⚠️ 系統目前未在追蹤';
+            replyMessage = '⚠️ System is not currently tracking';
           } else {
             this.stopTracking();
-            replyMessage = '⏹️ 已停止追蹤';
+            replyMessage = '⏹️ Tracking stopped';
           }
           break;
           
-        case '狀態':
+        case '/status':
         case 'status':
-        case '追蹤狀態':
+        case '/info':
+        case '/state':
           replyMessage = await this.getStatusMessage();
           break;
           
-        case '幫助':
+        case '/help':
         case 'help':
-        case '指令':
+        case '/commands':
+        case '/menu':
           replyMessage = this.getHelpMessage();
           break;
           
-        case '測試':
+        case '/test':
         case 'test':
-          replyMessage = '🧪 測試通知\n✅ 系統運作正常！';
+        case '/ping':
+          replyMessage = '🧪 Test notification\n✅ System is working properly!';
           break;
 
-        case '我的規則':
-        case '規則列表':
+        case '/rules':
+        case 'rules':
+        case '/list':
           replyMessage = await this.getUserRulesMessage(userId);
           break;
 
-        case '新增規則':
-        case '設定規則':
-        case '網頁設定':
+        case '/add':
+        case '/setup':
+        case '/configure':
+        case 'add rule':
+        case 'setup':
           const liffId = process.env.LINE_LIFF_ID;
           if (liffId) {
-            replyMessage = `📝 請使用 LINE 網頁介面設定個人追蹤規則:\nhttps://liff.line.me/${liffId}\n\n✨ 自動識別身份，無需額外設定`;
+            replyMessage = `📝 Please use the LINE web interface to set up your personal tracking rules:\nhttps://liff.line.me/${liffId}\n\n✨ Auto-detects your identity, no additional setup required`;
           } else {
             const webUrl = process.env.WEB_URL || 'http://localhost:3000';
-            replyMessage = `📝 請使用網頁介面新增追蹤規則:\n${webUrl}\n\n⚠️ 提醒：請先設定 LIFF ID 以便識別身份`;
+            replyMessage = `📝 Please use the web interface to add tracking rules:\n${webUrl}\n\n⚠️ Note: Please configure LIFF ID to enable identity recognition`;
           }
           break;
           
         default:
-          replyMessage = '❓ 不認識的指令\n請輸入「幫助」查看可用指令';
+          replyMessage = '❓ Unknown command\nType "/help" to see available commands';
       }
       
       if (replyMessage) {
@@ -468,10 +482,10 @@ class AppleTracker {
       }
       
     } catch (error) {
-      console.error('處理LINE事件錯誤:', error);
+      console.error('LINE event processing error:', error);
       const lineProvider = this.notificationManager.getProvider('line');
       if (lineProvider) {
-        await lineProvider.replyMessage(event.replyToken, '❌ 系統發生錯誤，請稍後再試');
+        await lineProvider.replyMessage(event.replyToken, '❌ System error occurred, please try again later');
       }
     }
     
@@ -487,16 +501,16 @@ class AppleTracker {
 
   async getStatusMessage() {
     if (!this.firebaseService.initialized) {
-      return `📊 系統狀態\n\n🎯 追蹤狀態: ${this.isTracking ? '運行中' : '已停止'}\n⚠️  Firebase未連接`;
+      return `📊 System Status\n\n🎯 Tracking Status: ${this.isTracking ? 'Running' : 'Stopped'}\n⚠️  Firebase not connected`;
     }
     
     const stats = await this.firebaseService.getSystemStats();
     
-    let message = `📊 系統狀態\n\n`;
-    message += `🎯 追蹤狀態: ${this.isTracking ? '運行中' : '已停止'}\n`;
-    message += `📋 啟用規則: ${stats.activeRules} 個\n`;
-    message += `👥 註冊使用者: ${stats.totalUsers} 人\n`;
-    message += `📤 24小時通知: ${stats.notificationsLast24h} 則`;
+    let message = `📊 System Status\n\n`;
+    message += `🎯 Tracking Status: ${this.isTracking ? 'Running' : 'Stopped'}\n`;
+    message += `📋 Active Rules: ${stats.activeRules}\n`;
+    message += `👥 Registered Users: ${stats.totalUsers}\n`;
+    message += `📤 24h Notifications: ${stats.notificationsLast24h}`;
     
     return message;
   }
@@ -505,10 +519,10 @@ class AppleTracker {
     if (!this.firebaseService.initialized) {
       const liffId = process.env.LINE_LIFF_ID;
       if (liffId) {
-        return `📋 您的追蹤規則\n\n⚠️  Firebase未連接，無法顯示個人規則\n\n📝 請透過 LINE 網頁設定個人規則:\nhttps://liff.line.me/${liffId}`;
+        return `📋 Your Tracking Rules\n\n⚠️  Firebase not connected, unable to show personal rules\n\n📝 Please use LINE web interface to set up personal rules:\nhttps://liff.line.me/${liffId}`;
       } else {
         const webUrl = process.env.WEB_URL || 'http://localhost:3000';
-        return `📋 您的追蹤規則\n\n⚠️  Firebase未連接\n📝 請使用網頁介面:\n${webUrl}`;
+        return `📋 Your Tracking Rules\n\n⚠️  Firebase not connected\n📝 Please use web interface:\n${webUrl}`;
       }
     }
     
@@ -518,28 +532,28 @@ class AppleTracker {
       if (rules.length === 0) {
         const liffId = process.env.LINE_LIFF_ID;
         if (liffId) {
-          return `📋 您目前沒有設定追蹤規則\n\n📝 請透過 LINE 網頁設定個人規則:\nhttps://liff.line.me/${liffId}\n\n✨ 點選連結會自動識別身份`;
+          return `📋 You have no tracking rules set up yet\n\n📝 Please use LINE web interface to set up personal rules:\nhttps://liff.line.me/${liffId}\n\n✨ Click the link to automatically identify your account`;
         } else {
           const webUrl = process.env.WEB_URL || 'http://localhost:3000';
-          return `📋 您目前沒有設定追蹤規則\n\n📝 請使用網頁介面新增規則:\n${webUrl}\n\n⚠️ 建議設定 LIFF 以啟用個人規則功能`;
+          return `📋 You have no tracking rules set up yet\n\n📝 Please use web interface to add rules:\n${webUrl}\n\n⚠️ Recommend setting up LIFF to enable personal rules feature`;
         }
       }
       
-      let message = `📋 您的追蹤規則 (${rules.length} 個):\n\n`;
+      let message = `📋 Your Tracking Rules (${rules.length}):\n\n`;
       
       rules.forEach((rule, index) => {
         message += `${index + 1}. ${rule.name}\n`;
-        if (rule.filters.productType) message += `   📱 產品: ${rule.filters.productType}\n`;
-        if (rule.filters.chip) message += `   🔧 晶片: ${rule.filters.chip}\n`;
-        if (rule.filters.minMemory) message += `   💾 記憶體: ≥${rule.filters.minMemory}GB\n`;
-        if (rule.filters.maxPrice) message += `   💰 價格: ≤NT$${rule.filters.maxPrice.toLocaleString()}\n`;
+        if (rule.filters.productType) message += `   📱 Product: ${rule.filters.productType}\n`;
+        if (rule.filters.chip) message += `   🔧 Chip: ${rule.filters.chip}\n`;
+        if (rule.filters.minMemory) message += `   💾 Memory: ≥${rule.filters.minMemory}GB\n`;
+        if (rule.filters.maxPrice) message += `   💰 Price: ≤NT$${rule.filters.maxPrice.toLocaleString()}\n`;
         message += '\n';
       });
       
       return message;
     } catch (error) {
-      console.error('取得用戶規則錯誤:', error);
-      return '❌ 無法取得規則列表';
+      console.error('Get user rules error:', error);
+      return '❌ Unable to retrieve rules list';
     }
   }
 
@@ -548,19 +562,19 @@ class AppleTracker {
     const activeProviders = this.notificationManager.getActiveProviderNames();
     const liffId = process.env.LINE_LIFF_ID;
     
-    return `🤖 Apple 翻新機追蹤 Bot\n\n` +
-           `📱 可用指令:\n` +
-           `• 開始追蹤 - 開始監控新品\n` +
-           `• 停止追蹤 - 停止監控\n` +
-           `• 狀態 - 查看系統狀態\n` +
-           `• 我的規則 - 查看個人追蹤規則\n` +
-           `• 新增規則 - 設定個人追蹤規則\n` +
-           `• 測試 - 測試Bot連接\n` +
-           `• 幫助 - 顯示此訊息\n\n` +
-           `📤 啟用通知方式: ${activeProviders.join(', ')}\n\n` +
+    return `🤖 Apple Refurbished Tracker Bot\n\n` +
+           `📱 Available Commands:\n` +
+           `• /start - Begin monitoring new products\n` +
+           `• /stop - Stop monitoring\n` +
+           `• /status - Check system status\n` +
+           `• /rules - View your tracking rules\n` +
+           `• /add - Configure your tracking rules\n` +
+           `• /test - Test bot connection\n` +
+           `• /help - Show this message\n\n` +
+           `📤 Active notification methods: ${activeProviders.join(', ')}\n\n` +
            (liffId ? 
-             `📱 個人規則設定: https://liff.line.me/${liffId}` :
-             `⚠️ 請設定 LIFF ID 以啟用個人規則功能`);
+             `📱 Personal rules setup: https://liff.line.me/${liffId}` :
+             `⚠️ Please configure LIFF ID to enable personal rules feature`);
   }
 
   async scrapeProducts() {

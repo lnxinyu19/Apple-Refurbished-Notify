@@ -141,7 +141,9 @@ class FirebaseService {
     
     snapshot.docs.forEach(doc => {
       const data = doc.data();
-      products.set(data.url, data);
+      // 使用產品基礎 URL 作為 key
+      const productKey = this.getProductKey(data.url);
+      products.set(productKey, data);
     });
     
     return products;
@@ -152,15 +154,23 @@ class FirebaseService {
     const timestamp = admin.firestore.FieldValue.serverTimestamp();
     
     products.forEach(product => {
-      const productRef = this.db.collection('products').doc(this.getProductId(product.url));
+      // 使用產品基礎 URL 作為文檔 ID
+      const productKey = this.getProductKey(product.url);
+      const productRef = this.db.collection('products').doc(this.getProductId(productKey));
       batch.set(productRef, {
         ...product,
+        productKey: productKey, // 額外儲存產品基礎 URL
         lastSeen: timestamp,
         updatedAt: timestamp
       }, { merge: true });
     });
     
     await batch.commit();
+  }
+
+  // 獲取產品的唯一標識符（移除 URL 中的動態參數）
+  getProductKey(url) {
+    return url.split('?')[0]; // 移除查詢參數，只保留基礎 URL
   }
 
   getProductId(url) {

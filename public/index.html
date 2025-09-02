@@ -244,14 +244,16 @@
                     } else {
                         // 檢測環境並選擇登入方式
                         await this.checkLoginOptions();
+                        return; // 如果需要登入，就不要繼續初始化
                     }
                 }
                 
                 this.bindEvents();
                 this.updateUI();
+                this.updateUserInfo(); // 顯示用戶資訊
                 this.checkStatus();
                 
-                setInterval(() => this.checkStatus(), 10000);
+                setInterval(() => this.checkStatus(), 5 * 60 * 1000); // 5分鐘檢查一次
             }
 
             async checkLoginOptions() {
