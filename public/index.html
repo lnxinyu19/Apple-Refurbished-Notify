@@ -352,12 +352,24 @@
             addRule(e) {
                 e.preventDefault();
                 
+                // 確保 trackingRules 陣列存在
+                if (!this.config.trackingRules) {
+                    this.config.trackingRules = [];
+                }
+                
+                // 檢查必填欄位
+                const ruleName = document.getElementById('ruleName').value.trim();
+                if (!ruleName) {
+                    alert('請輸入規則名稱');
+                    return;
+                }
+                
                 // 生成唯一的 ID
                 const ruleId = 'rule_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 
                 const rule = {
                     id: ruleId,
-                    name: document.getElementById('ruleName').value,
+                    name: ruleName,
                     enabled: true,
                     filters: {
                         productType: document.getElementById('productType').value || undefined,
@@ -377,11 +389,17 @@
 
                 console.log('新增規則:', rule);
                 
-                this.config.trackingRules.push(rule);
-                this.saveConfig();
-                this.updateUI();
-                
-                document.getElementById('ruleForm').reset();
+                try {
+                    this.config.trackingRules.push(rule);
+                    this.saveConfig();
+                    this.updateUI();
+                    
+                    document.getElementById('ruleForm').reset();
+                    alert('規則新增成功！');
+                } catch (error) {
+                    console.error('新增規則失敗:', error);
+                    alert('新增規則失敗: ' + error.message);
+                }
             }
 
             deleteRule(ruleId) {
