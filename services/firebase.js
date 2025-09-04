@@ -134,6 +134,19 @@ class FirebaseService {
     }
   }
 
+  async getAllProducts() {
+    try {
+      const snapshot = await this.db.collection('products')
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('獲取所有產品失敗:', error);
+      return [];
+    }
+  }
+
   // 系統狀態管理
   async getSystemState() {
     try {

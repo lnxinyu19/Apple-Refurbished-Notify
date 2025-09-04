@@ -1207,37 +1207,33 @@ class AppleTracker {
 
   async generateDailySummary(date) {
     try {
-      const products = await this.firebaseService.getProductsFromDate(date);
-      if (products.length === 0) {
-        return `📊 每日摘要 (${date.toLocaleDateString('zh-TW')})\n\n昨日沒有新的整修產品上架。`;
+      const newProducts = await this.firebaseService.getProductsFromDate(date);
+      const totalProducts = await this.firebaseService.getAllProducts();
+      
+      if (newProducts.length === 0) {
+        return `📊 每日摘要 (${date.toLocaleDateString('zh-TW')})\n\n昨日沒有新的整修產品上架。\n📱 目前總數: ${totalProducts.length} 個`;
       }
       
-      const categories = {};
-      let totalValue = 0;
-      
-      products.forEach(product => {
-        const category = product.specs?.category || 'Other';
-        if (!categories[category]) categories[category] = 0;
-        categories[category]++;
-        
-        const price = parseInt(product.price?.replace(/[^\d]/g, '') || '0');
-        totalValue += price;
-      });
+      const categories = this.categorizeProducts(newProducts);
       
       let message = `📊 每日摘要 (${date.toLocaleDateString('zh-TW')})\n\n`;
-      message += `🆕 新產品: ${products.length} 個\n`;
-      message += `💰 總價值: NT$${totalValue.toLocaleString()}\n\n`;
+      message += `🆕 昨日新品: ${newProducts.length} 個\n`;
+      message += `📱 目前總數: ${totalProducts.length} 個\n\n`;
       
-      message += `📱 分類統計:\n`;
+      message += `📱 昨日新品分類:\n`;
       Object.entries(categories).forEach(([category, count]) => {
         message += `• ${category}: ${count} 個\n`;
       });
       
       // 顯示熱門產品（前3個）
-      if (products.length > 0) {
-        message += `\n🔥 熱門產品:\n`;
-        products.slice(0, 3).forEach((product, index) => {
-          message += `${index + 1}. ${product.name}\n   💰 ${product.price}\n`;
+      if (newProducts.length > 0) {
+        message += `\n🔥 熱門新品:\n`;
+        newProducts.slice(0, 3).forEach((product, index) => {
+          const shortName = product.name
+            .replace(/整修品.*$/, "")
+            .replace(/Apple\s*/gi, "")
+            .trim();
+          message += `${index + 1}. ${shortName}\n   💰 ${product.price}\n`;
         });
       }
       
@@ -1250,35 +1246,30 @@ class AppleTracker {
 
   async generateWeeklySummary(startDate, endDate) {
     try {
-      const products = await this.firebaseService.getProductsFromDateRange(startDate, endDate);
-      if (products.length === 0) {
-        return `📊 週報告 (${startDate.toLocaleDateString('zh-TW')} - ${endDate.toLocaleDateString('zh-TW')})\n\n本週沒有新的整修產品。`;
+      const weeklyProducts = await this.firebaseService.getProductsFromDateRange(startDate, endDate);
+      const totalProducts = await this.firebaseService.getAllProducts();
+      
+      if (weeklyProducts.length === 0) {
+        return `📊 週報告 (${startDate.toLocaleDateString('zh-TW')} - ${endDate.toLocaleDateString('zh-TW')})\n\n本週沒有新的整修產品。\n📱 目前總數: ${totalProducts.length} 個`;
       }
       
       let message = `📊 週報告 (${startDate.toLocaleDateString('zh-TW')} - ${endDate.toLocaleDateString('zh-TW')})\n\n`;
-      message += `🆕 本週新產品: ${products.length} 個\n`;
+      message += `🆕 本週新品: ${weeklyProducts.length} 個\n`;
+      message += `📱 目前總數: ${totalProducts.length} 個\n\n`;
       
-      // 價格統計
-      const prices = products.map(p => parseInt(p.price?.replace(/[^\d]/g, '') || '0')).filter(p => p > 0);
-      if (prices.length > 0) {
-        const avgPrice = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
-        const minPrice = Math.min(...prices);
-        const maxPrice = Math.max(...prices);
-        
-        message += `💰 價格區間: NT$${minPrice.toLocaleString()} - NT$${maxPrice.toLocaleString()}\n`;
-        message += `💰 平均價格: NT$${avgPrice.toLocaleString()}\n\n`;
-      }
+      // 本週新品分類統計
+      const weeklyCategories = this.categorizeProducts(weeklyProducts);
+      message += `📱 本週新品分類:\n`;
+      Object.entries(weeklyCategories)
+        .sort(([,a], [,b]) => b - a)
+        .forEach(([category, count]) => {
+          message += `• ${category}: ${count} 個\n`;
+        });
       
-      // 熱門分類
-      const categories = {};
-      products.forEach(product => {
-        const category = product.specs?.productType || 'Other';
-        if (!categories[category]) categories[category] = 0;
-        categories[category]++;
-      });
-      
-      message += `📱 產品分類:\n`;
-      Object.entries(categories)
+      // 目前庫存分類統計
+      const totalCategories = this.categorizeProducts(totalProducts);
+      message += `\n📊 目前庫存分類:\n`;
+      Object.entries(totalCategories)
         .sort(([,a], [,b]) => b - a)
         .forEach(([category, count]) => {
           message += `• ${category}: ${count} 個\n`;
@@ -1289,6 +1280,39 @@ class AppleTracker {
       console.error('生成週報告失敗:', error);
       return null;
     }
+  }
+
+  // 產品分類方法
+  categorizeProducts(products) {
+    const categories = {
+      'MacBook': 0,
+      'iPad': 0,
+      'AirPods': 0,
+      'HomePod': 0,
+      '其他': 0
+    };
+
+    products.forEach(product => {
+      const name = product.name?.toLowerCase() || '';
+      const productType = product.specs?.productType?.toLowerCase() || '';
+      
+      if (name.includes('macbook') || productType.includes('macbook')) {
+        categories['MacBook']++;
+      } else if (name.includes('ipad') || productType.includes('ipad')) {
+        categories['iPad']++;
+      } else if (name.includes('airpods') || productType.includes('airpods')) {
+        categories['AirPods']++;
+      } else if (name.includes('homepod') || productType.includes('homepod')) {
+        categories['HomePod']++;
+      } else {
+        categories['其他']++;
+      }
+    });
+
+    // 只返回有產品的分類
+    return Object.fromEntries(
+      Object.entries(categories).filter(([, count]) => count > 0)
+    );
   }
 
   async cleanup() {
