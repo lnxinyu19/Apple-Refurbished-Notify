@@ -307,6 +307,11 @@ class AppleTracker {
     if (!firebaseReady) {
       console.log("Firebase未連接，部分功能可能無法使用");
     }
+    
+    // 啟動摘要通知定時檢查 (每小時檢查一次)
+    if (firebaseReady) {
+      this.startSummaryScheduler();
+    }
   }
 
   async loadConfig() {
@@ -407,6 +412,15 @@ class AppleTracker {
 
         message += `${globalIndex}. ${shortName}\n`;
         message += `💰 ${product.price}\n`;
+        
+        // 顯示匹配的規則
+        if (product.matchingRules && product.matchingRules.length > 0) {
+          if (product.matchingRules.length === 1) {
+            message += `📋 符合規則: ${product.matchingRules[0]}\n`;
+          } else {
+            message += `📋 符合規則: ${product.matchingRules.join(', ')}\n`;
+          }
+        }
 
         if (product.url) {
           const shortUrl = await this.shortenUrl(product.url);
@@ -1003,20 +1017,27 @@ class AppleTracker {
           user.lineUserId
         );
 
-        let userNewMatches = [];
+        const productRuleMap = new Map(); // 記錄每個產品匹配到的規則
 
         for (const rule of userRules) {
           const newMatches = this.filterProducts(newProducts, rule.filters);
 
-          if (newMatches.length > 0) {
-            userNewMatches = userNewMatches.concat(newMatches);
+          for (const product of newMatches) {
+            if (!productRuleMap.has(product.url)) {
+              productRuleMap.set(product.url, {
+                product: product,
+                matchingRules: []
+              });
+            }
+            productRuleMap.get(product.url).matchingRules.push(rule.name);
           }
         }
 
-        userNewMatches = userNewMatches.filter(
-          (product, index, self) =>
-            index === self.findIndex((p) => p.url === product.url)
-        );
+        // 將產品和對應的規則資訊轉換為陣列
+        const userNewMatches = Array.from(productRuleMap.values()).map(item => ({
+          ...item.product,
+          matchingRules: item.matchingRules
+        }));
 
         if (userNewMatches.length > 0) {
           const messages = await this.formatNewProductMessage(userNewMatches);
@@ -1103,8 +1124,137 @@ class AppleTracker {
     });
   }
 
+  // 摘要通知排程
+  startSummaryScheduler() {
+    console.log("🕐 啟動摘要通知排程器");
+    
+    // 每小時檢查一次是否需要發送摘要
+    this.summaryInterval = setInterval(async () => {
+      try {
+        await this.sendDailySummary();
+      } catch (error) {
+        console.error('摘要通知檢查失敗:', error);
+      }
+    }, 60 * 60 * 1000); // 每小時檢查
+    
+    // 立即檢查一次
+    setTimeout(async () => {
+      try {
+        await this.sendDailySummary();
+      } catch (error) {
+        console.error('初始摘要通知檢查失敗:', error);
+      }
+    }, 5000); // 5秒後執行
+  }
+
+  // 摘要通知功能
+  async sendDailySummary() {
+    try {
+      const activeUsers = await this.firebaseService.getActiveUsers();
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      for (const user of activeUsers) {
+        const summarySettings = user.summarySettings?.dailySummary;
+        if (!summarySettings?.enabled) continue;
+        
+        // 檢查時間是否匹配（簡單實作，實際應該用 cron job）
+        const now = new Date();
+        const [hour, minute] = summarySettings.time.split(':');
+        if (now.getHours() !== parseInt(hour)) continue;
+        
+        const summary = await this.generateDailySummary(yesterday);
+        if (summary) {
+          await this.notificationManager.sendNotification(user, summary);
+        }
+      }
+    } catch (error) {
+      console.error('發送每日摘要失敗:', error);
+    }
+  }
+
+  async generateDailySummary(date) {
+    try {
+      const newProducts = await this.firebaseService.getProductsFromDate(date);
+      const totalProducts = await this.firebaseService.getAllProducts();
+      
+      if (newProducts.length === 0) {
+        return `📊 每日摘要 (${date.toLocaleDateString('zh-TW')})\n\n昨日沒有新的整修產品上架。\n📱 目前總數: ${totalProducts.length} 個`;
+      }
+      
+      const categories = this.categorizeProducts(newProducts);
+      
+      let message = `📊 每日摘要 (${date.toLocaleDateString('zh-TW')})\n\n`;
+      message += `🆕 昨日新品: ${newProducts.length} 個\n`;
+      message += `📱 目前總數: ${totalProducts.length} 個\n\n`;
+      
+      message += `📱 昨日新品分類:\n`;
+      Object.entries(categories).forEach(([category, count]) => {
+        message += `• ${category}: ${count} 個\n`;
+      });
+      
+      // 顯示熱門產品（前3個）
+      if (newProducts.length > 0) {
+        message += `\n🔥 熱門新品:\n`;
+        newProducts.slice(0, 3).forEach((product, index) => {
+          const shortName = product.name
+            .replace(/整修品.*$/, "")
+            .replace(/Apple\s*/gi, "")
+            .trim();
+          message += `${index + 1}. ${shortName}\n   💰 ${product.price}\n`;
+        });
+      }
+      
+      return message;
+    } catch (error) {
+      console.error('生成每日摘要失敗:', error);
+      return null;
+    }
+  }
+
+
+  // 產品分類方法
+  categorizeProducts(products) {
+    const categories = {
+      'MacBook': 0,
+      'iPad': 0,
+      'AirPods': 0,
+      'HomePod': 0,
+      '其他': 0
+    };
+
+    products.forEach(product => {
+      const name = product.name?.toLowerCase() || '';
+      const productType = product.specs?.productType?.toLowerCase() || '';
+      
+      if (name.includes('macbook') || productType.includes('macbook')) {
+        categories['MacBook']++;
+      } else if (name.includes('ipad') || productType.includes('ipad')) {
+        categories['iPad']++;
+      } else if (name.includes('airpods') || productType.includes('airpods')) {
+        categories['AirPods']++;
+      } else if (name.includes('homepod') || productType.includes('homepod')) {
+        categories['HomePod']++;
+      } else {
+        categories['其他']++;
+      }
+    });
+
+    // 只返回有產品的分類
+    return Object.fromEntries(
+      Object.entries(categories).filter(([, count]) => count > 0)
+    );
+  }
+
   async cleanup() {
     await this.stopTracking();
+    
+    // 清理摘要排程
+    if (this.summaryInterval) {
+      clearInterval(this.summaryInterval);
+      this.summaryInterval = null;
+    }
+    
     if (this.browser) {
       await this.browser.close();
     }

@@ -99,6 +99,54 @@ class FirebaseService {
     });
   }
 
+  // 摘要功能相關方法
+  async getProductsFromDate(date) {
+    try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const snapshot = await this.db.collection('products')
+        .where('createdAt', '>=', startOfDay)
+        .where('createdAt', '<=', endOfDay)
+        .get();
+
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('獲取特定日期產品失敗:', error);
+      return [];
+    }
+  }
+
+  async getProductsFromDateRange(startDate, endDate) {
+    try {
+      const snapshot = await this.db.collection('products')
+        .where('createdAt', '>=', startDate)
+        .where('createdAt', '<=', endDate)
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('獲取日期範圍產品失敗:', error);
+      return [];
+    }
+  }
+
+  async getAllProducts() {
+    try {
+      const snapshot = await this.db.collection('products')
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('獲取所有產品失敗:', error);
+      return [];
+    }
+  }
+
   // 系統狀態管理
   async getSystemState() {
     try {
@@ -123,7 +171,6 @@ class FirebaseService {
 
   // 追蹤規則管理
   async getUserTrackingRules(lineUserId) {
-    console.log(`[DEBUG] 開始獲取用戶 ${lineUserId} 的追蹤規則`);
     const rulesRef = this.db.collection('users').doc(lineUserId).collection('trackingRules');
     const snapshot = await rulesRef.get();
     
@@ -132,20 +179,12 @@ class FirebaseService {
       ...doc.data()
     }));
     
-    console.log(`[DEBUG] Firebase 原始規則數量: ${allRules.length}`);
-    allRules.forEach(rule => {
-      console.log(`[DEBUG] 規則 ID: ${rule.id}, enabled: ${rule.enabled}, 內容:`, rule);
-    });
-    
     const filteredRules = allRules.filter(rule => rule.enabled !== false);
-    console.log(`[DEBUG] 過濾後規則數量: ${filteredRules.length}`);
     
     return filteredRules;
   }
 
   async addTrackingRule(lineUserId, rule) {
-    console.log(`[DEBUG] 開始添加追蹤規則 - 用戶: ${lineUserId}`);
-    console.log(`[DEBUG] 輸入規則:`, rule);
     
     const ruleData = {
       ...rule,
@@ -154,14 +193,10 @@ class FirebaseService {
     };
 
     if (rule.id) {
-      console.log(`[DEBUG] 使用現有 ID: ${rule.id}, 執行 set 操作`);
       await this.db.collection('users').doc(lineUserId).collection('trackingRules').doc(rule.id).set(ruleData);
-      console.log(`[DEBUG] set 操作完成，返回 ID: ${rule.id}`);
       return rule.id;
     } else {
-      console.log(`[DEBUG] 沒有提供 ID，執行 add 操作`);
       const docRef = await this.db.collection('users').doc(lineUserId).collection('trackingRules').add(ruleData);
-      console.log(`[DEBUG] add 操作完成，生成新 ID: ${docRef.id}`);
       return docRef.id;
     }
   }
@@ -176,20 +211,15 @@ class FirebaseService {
   }
 
   async deleteTrackingRule(lineUserId, ruleId) {
-    console.log(`[DEBUG] 開始刪除追蹤規則 - 用戶: ${lineUserId}, 規則 ID: ${ruleId}`);
-    
     // 先檢查規則是否存在
     const ruleRef = this.db.collection('users').doc(lineUserId).collection('trackingRules').doc(ruleId);
     const doc = await ruleRef.get();
     
     if (!doc.exists) {
-      console.log(`[DEBUG] 規則不存在: ${ruleId}`);
       throw new Error(`規則 ${ruleId} 不存在`);
     }
     
-    console.log(`[DEBUG] 找到規則，準備刪除:`, doc.data());
     await ruleRef.delete();
-    console.log(`[DEBUG] 規則刪除完成: ${ruleId}`);
   }
 
   // 產品歷史管理
@@ -204,7 +234,6 @@ class FirebaseService {
       products.set(productKey, data);
     });
     
-    console.log(`從 Firebase 讀取 ${snapshot.docs.length} 個文檔，生成 ${products.size} 個唯一產品 Key`);
     return products;
   }
 
@@ -217,8 +246,6 @@ class FirebaseService {
     for (let i = 0; i < products.length; i += batchSize) {
       const batch = this.db.batch();
       const batchProducts = products.slice(i, i + batchSize);
-      
-      console.log(`儲存產品批次 ${Math.floor(i/batchSize) + 1}: ${batchProducts.length} 個產品`);
       
       batchProducts.forEach(product => {
         // 使用產品基礎 URL 作為文檔 ID
@@ -234,8 +261,6 @@ class FirebaseService {
       
       await batch.commit();
     }
-    
-    console.log(`✅ 總共儲存了 ${products.length} 個產品`);
   }
 
   // 獲取產品的唯一標識符（移除 URL 中的動態參數）
