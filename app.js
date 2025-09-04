@@ -1130,12 +1130,8 @@ class AppleTracker {
     
     // 每小時檢查一次是否需要發送摘要
     this.summaryInterval = setInterval(async () => {
-      const now = new Date();
-      console.log(`檢查摘要通知 - ${now.toLocaleString('zh-TW')}`);
-      
       try {
         await this.sendDailySummary();
-        await this.sendWeeklySummary();
       } catch (error) {
         console.error('摘要通知檢查失敗:', error);
       }
@@ -1145,7 +1141,6 @@ class AppleTracker {
     setTimeout(async () => {
       try {
         await this.sendDailySummary();
-        await this.sendWeeklySummary();
       } catch (error) {
         console.error('初始摘要通知檢查失敗:', error);
       }
@@ -1175,33 +1170,6 @@ class AppleTracker {
       }
     } catch (error) {
       console.error('發送每日摘要失敗:', error);
-    }
-  }
-
-  async sendWeeklySummary() {
-    try {
-      const activeUsers = await this.firebaseService.getActiveUsers();
-      const lastWeek = new Date();
-      lastWeek.setDate(lastWeek.getDate() - 7);
-      
-      for (const user of activeUsers) {
-        const summarySettings = user.summarySettings?.weeklySummary;
-        if (!summarySettings?.enabled) continue;
-        
-        // 檢查是否為指定的星期幾和時間
-        const now = new Date();
-        if (now.getDay() !== summarySettings.day) continue;
-        
-        const [hour, minute] = summarySettings.time.split(':');
-        if (now.getHours() !== parseInt(hour)) continue;
-        
-        const summary = await this.generateWeeklySummary(lastWeek, now);
-        if (summary) {
-          await this.notificationManager.sendNotification(user, summary);
-        }
-      }
-    } catch (error) {
-      console.error('發送每週摘要失敗:', error);
     }
   }
 
@@ -1244,43 +1212,6 @@ class AppleTracker {
     }
   }
 
-  async generateWeeklySummary(startDate, endDate) {
-    try {
-      const weeklyProducts = await this.firebaseService.getProductsFromDateRange(startDate, endDate);
-      const totalProducts = await this.firebaseService.getAllProducts();
-      
-      if (weeklyProducts.length === 0) {
-        return `📊 週報告 (${startDate.toLocaleDateString('zh-TW')} - ${endDate.toLocaleDateString('zh-TW')})\n\n本週沒有新的整修產品。\n📱 目前總數: ${totalProducts.length} 個`;
-      }
-      
-      let message = `📊 週報告 (${startDate.toLocaleDateString('zh-TW')} - ${endDate.toLocaleDateString('zh-TW')})\n\n`;
-      message += `🆕 本週新品: ${weeklyProducts.length} 個\n`;
-      message += `📱 目前總數: ${totalProducts.length} 個\n\n`;
-      
-      // 本週新品分類統計
-      const weeklyCategories = this.categorizeProducts(weeklyProducts);
-      message += `📱 本週新品分類:\n`;
-      Object.entries(weeklyCategories)
-        .sort(([,a], [,b]) => b - a)
-        .forEach(([category, count]) => {
-          message += `• ${category}: ${count} 個\n`;
-        });
-      
-      // 目前庫存分類統計
-      const totalCategories = this.categorizeProducts(totalProducts);
-      message += `\n📊 目前庫存分類:\n`;
-      Object.entries(totalCategories)
-        .sort(([,a], [,b]) => b - a)
-        .forEach(([category, count]) => {
-          message += `• ${category}: ${count} 個\n`;
-        });
-      
-      return message;
-    } catch (error) {
-      console.error('生成週報告失敗:', error);
-      return null;
-    }
-  }
 
   // 產品分類方法
   categorizeProducts(products) {

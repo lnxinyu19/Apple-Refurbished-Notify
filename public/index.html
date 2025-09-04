@@ -173,50 +173,32 @@
                                 <label class="flex items-center space-x-2 sm:w-1/2">
                                     <input type="checkbox" id="dailySummaryEnabled" class="text-blue-600">
                                     <span class="text-sm font-medium text-gray-700">每日產品摘要</span>
+                                    <span id="dailySummaryStatus" class="ml-2 px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-600" style="display: none;"></span>
                                 </label>
                                 <div class="flex items-center space-x-2 sm:w-1/2">
                                     <label class="text-sm text-gray-600">時間:</label>
                                     <select id="dailySummaryTime" class="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" disabled>
-                                        <option value="08:00">08:00</option>
                                         <option value="09:00">09:00</option>
-                                        <option value="10:00">10:00</option>
                                         <option value="12:00">12:00</option>
                                         <option value="18:00">18:00</option>
-                                        <option value="20:00">20:00</option>
                                         <option value="21:00">21:00</option>
                                     </select>
                                 </div>
                             </div>
                             
-                            <!-- 每週摘要設定 -->
-                            <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0">
-                                <label class="flex items-center space-x-2 sm:w-1/2">
-                                    <input type="checkbox" id="weeklySummaryEnabled" class="text-blue-600">
-                                    <span class="text-sm font-medium text-gray-700">每週完整報告</span>
-                                </label>
-                                <div class="flex items-center space-x-2 sm:w-1/2">
-                                    <select id="weeklyDay" class="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" disabled>
-                                        <option value="0">週日</option>
-                                        <option value="1">週一</option>
-                                        <option value="7" selected>週日</option>
-                                    </select>
-                                    <select id="weeklySummaryTime" class="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" disabled>
-                                        <option value="09:00">09:00</option>
-                                        <option value="19:00">19:00</option>
-                                        <option value="20:00" selected>20:00</option>
-                                        <option value="21:00">21:00</option>
-                                    </select>
-                                </div>
+                            <!-- 第一次通知時間提示 -->
+                            <div id="nextNotificationHint" class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg" style="display: none;">
+                                <p class="text-sm text-yellow-800">
+                                    <span class="font-medium">📅 下次通知時間:</span> <span id="nextNotificationTime"></span>
+                                </p>
                             </div>
+                            
                         </div>
                         
                         <!-- 說明文字 -->
                         <div class="mt-4 p-3 bg-blue-50 rounded-lg">
                             <p class="text-sm text-blue-800">
                                 <span class="font-medium">📋 每日摘要:</span> 顯示當天新增的產品數量和熱門產品
-                            </p>
-                            <p class="text-sm text-blue-800 mt-1">
-                                <span class="font-medium">📊 每週報告:</span> 包含一週內的所有產品、價格趨勢和庫存統計
                             </p>
                         </div>
                     </div>
@@ -492,10 +474,10 @@
                 
                 // 摘要通知設定事件
                 document.getElementById('dailySummaryEnabled').addEventListener('change', (e) => this.toggleSummarySettings('daily', e.target.checked));
-                document.getElementById('weeklySummaryEnabled').addEventListener('change', (e) => this.toggleSummarySettings('weekly', e.target.checked));
-                document.getElementById('dailySummaryTime').addEventListener('change', () => this.saveSummarySettings());
-                document.getElementById('weeklySummaryTime').addEventListener('change', () => this.saveSummarySettings());
-                document.getElementById('weeklyDay').addEventListener('change', () => this.saveSummarySettings());
+                document.getElementById('dailySummaryTime').addEventListener('change', () => {
+                    this.updateSummaryStatus();
+                    this.saveSummarySettings();
+                });
             }
 
             async loadConfig() {
@@ -523,30 +505,91 @@
                 if (dailyEnabled && dailyTime) {
                     dailyEnabled.checked = summarySettings.dailySummary?.enabled || false;
                     dailyTime.disabled = !dailyEnabled.checked;
-                    dailyTime.value = summarySettings.dailySummary?.time || '08:00';
+                    dailyTime.value = summarySettings.dailySummary?.time || '09:00';
                 }
                 
-                // 更新每週摘要設定
-                const weeklyEnabled = document.getElementById('weeklySummaryEnabled');
-                const weeklyDay = document.getElementById('weeklyDay');
-                const weeklyTime = document.getElementById('weeklySummaryTime');
+                this.updateSummaryStatus();
+            }
+
+            updateSummaryStatus() {
+                const statusElement = document.getElementById('dailySummaryStatus');
+                const dailyEnabled = document.getElementById('dailySummaryEnabled');
+                const dailyTime = document.getElementById('dailySummaryTime');
+                const hintElement = document.getElementById('nextNotificationHint');
+                const nextTimeElement = document.getElementById('nextNotificationTime');
                 
-                if (weeklyEnabled && weeklyDay && weeklyTime) {
-                    weeklyEnabled.checked = summarySettings.weeklySummary?.enabled || false;
-                    weeklyDay.disabled = !weeklyEnabled.checked;
-                    weeklyTime.disabled = !weeklyEnabled.checked;
-                    weeklyDay.value = summarySettings.weeklySummary?.day || '7';
-                    weeklyTime.value = summarySettings.weeklySummary?.time || '20:00';
+                if (statusElement && dailyEnabled) {
+                    if (dailyEnabled.checked) {
+                        statusElement.textContent = `已啟用 (${dailyTime.value})`;
+                        statusElement.className = 'ml-2 px-2 py-1 text-xs rounded-full bg-green-100 text-green-700';
+                        statusElement.style.display = 'inline-block';
+                        
+                        // 顯示下次通知時間提示
+                        const nextNotificationTime = this.calculateNextNotificationTime(dailyTime.value);
+                        if (nextTimeElement && hintElement) {
+                            nextTimeElement.textContent = nextNotificationTime;
+                            hintElement.style.display = 'block';
+                        }
+                    } else {
+                        statusElement.textContent = '未啟用';
+                        statusElement.className = 'ml-2 px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-600';
+                        statusElement.style.display = 'inline-block';
+                        
+                        // 隱藏提示
+                        if (hintElement) {
+                            hintElement.style.display = 'none';
+                        }
+                    }
                 }
+            }
+
+            calculateNextNotificationTime(timeString) {
+                const now = new Date();
+                const [hours, minutes] = timeString.split(':').map(Number);
+                
+                // 計算今天的通知時間
+                const todayNotification = new Date(now);
+                todayNotification.setHours(hours, 0, 0, 0);
+                
+                let nextNotification;
+                
+                // 如果今天的通知時間還沒到，就是今天；否則是明天
+                if (now < todayNotification) {
+                    nextNotification = todayNotification;
+                } else {
+                    nextNotification = new Date(todayNotification);
+                    nextNotification.setDate(nextNotification.getDate() + 1);
+                }
+                
+                const options = { 
+                    month: 'numeric', 
+                    day: 'numeric', 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: false
+                };
+                
+                return nextNotification.toLocaleString('zh-TW', options);
+            }
+
+            showSuccessMessage(message) {
+                const successDiv = document.createElement('div');
+                successDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                successDiv.textContent = '✅ ' + message;
+                document.body.appendChild(successDiv);
+                
+                setTimeout(() => {
+                    if (document.body.contains(successDiv)) {
+                        document.body.removeChild(successDiv);
+                    }
+                }, 3000);
             }
 
             toggleSummarySettings(type, enabled) {
                 if (type === 'daily') {
                     document.getElementById('dailySummaryTime').disabled = !enabled;
-                } else if (type === 'weekly') {
-                    document.getElementById('weeklyDay').disabled = !enabled;
-                    document.getElementById('weeklySummaryTime').disabled = !enabled;
                 }
+                this.updateSummaryStatus();
                 this.saveSummarySettings();
             }
 
@@ -564,19 +607,11 @@
                     // 收集設定值
                     const dailyEnabled = document.getElementById('dailySummaryEnabled').checked;
                     const dailyTime = document.getElementById('dailySummaryTime').value;
-                    const weeklyEnabled = document.getElementById('weeklySummaryEnabled').checked;
-                    const weeklyDay = document.getElementById('weeklyDay').value;
-                    const weeklyTime = document.getElementById('weeklySummaryTime').value;
 
                     this.config.summarySettings = {
                         dailySummary: {
                             enabled: dailyEnabled,
                             time: dailyTime
-                        },
-                        weeklySummary: {
-                            enabled: weeklyEnabled,
-                            day: parseInt(weeklyDay),
-                            time: weeklyTime
                         }
                     };
 
@@ -605,6 +640,8 @@
                     }
                     
                     const result = await response.json();
+                    this.showSuccessMessage('設定已儲存');
+                    this.updateSummaryStatus();
                 } catch (error) {
                     console.error('儲存配置失敗:', error);
                     alert('儲存配置失敗: ' + error.message);
@@ -725,7 +762,6 @@
             }
 
             async deleteRule(ruleId, buttonElement = null) {
-                
                 if (!this.isLiffReady || !this.currentUser) {
                     alert('請透過 LINE 登入後再刪除規則');
                     return;
@@ -762,11 +798,9 @@
             }
 
             async toggleRule(ruleId) {
-                console.log('執行切換規則:', ruleId);
                 const rule = this.config.trackingRules.find(r => r.id === ruleId);
                 if (rule) {
                     rule.enabled = !rule.enabled;
-                    console.log('規則狀態已切換為:', rule.enabled);
                     await this.saveConfig();
                     this.updateUI();
                 } else {
