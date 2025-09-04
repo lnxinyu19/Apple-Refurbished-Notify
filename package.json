@@ -1,6 +1,6 @@
 {
   "name": "apple-refurbished-notify",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Apple refurbished products tracker and notifier",
   "main": "index.js",
   "scripts": {
