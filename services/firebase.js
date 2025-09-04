@@ -99,6 +99,41 @@ class FirebaseService {
     });
   }
 
+  // 摘要功能相關方法
+  async getProductsFromDate(date) {
+    try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const snapshot = await this.db.collection('products')
+        .where('createdAt', '>=', startOfDay)
+        .where('createdAt', '<=', endOfDay)
+        .get();
+
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('獲取特定日期產品失敗:', error);
+      return [];
+    }
+  }
+
+  async getProductsFromDateRange(startDate, endDate) {
+    try {
+      const snapshot = await this.db.collection('products')
+        .where('createdAt', '>=', startDate)
+        .where('createdAt', '<=', endDate)
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('獲取日期範圍產品失敗:', error);
+      return [];
+    }
+  }
+
   // 系統狀態管理
   async getSystemState() {
     try {

@@ -161,6 +161,66 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- 摘要通知設定 -->
+                <div class="mt-6 sm:mt-8">
+                    <div class="border-t pt-6">
+                        <h3 class="text-base sm:text-lg font-medium text-gray-900 mb-4">📱 摘要通知設定</h3>
+                        
+                        <!-- 每日摘要設定 -->
+                        <div class="space-y-4">
+                            <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0">
+                                <label class="flex items-center space-x-2 sm:w-1/2">
+                                    <input type="checkbox" id="dailySummaryEnabled" class="text-blue-600">
+                                    <span class="text-sm font-medium text-gray-700">每日產品摘要</span>
+                                </label>
+                                <div class="flex items-center space-x-2 sm:w-1/2">
+                                    <label class="text-sm text-gray-600">時間:</label>
+                                    <select id="dailySummaryTime" class="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" disabled>
+                                        <option value="08:00">08:00</option>
+                                        <option value="09:00">09:00</option>
+                                        <option value="10:00">10:00</option>
+                                        <option value="12:00">12:00</option>
+                                        <option value="18:00">18:00</option>
+                                        <option value="20:00">20:00</option>
+                                        <option value="21:00">21:00</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <!-- 每週摘要設定 -->
+                            <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0">
+                                <label class="flex items-center space-x-2 sm:w-1/2">
+                                    <input type="checkbox" id="weeklySummaryEnabled" class="text-blue-600">
+                                    <span class="text-sm font-medium text-gray-700">每週完整報告</span>
+                                </label>
+                                <div class="flex items-center space-x-2 sm:w-1/2">
+                                    <select id="weeklyDay" class="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" disabled>
+                                        <option value="0">週日</option>
+                                        <option value="1">週一</option>
+                                        <option value="7" selected>週日</option>
+                                    </select>
+                                    <select id="weeklySummaryTime" class="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" disabled>
+                                        <option value="09:00">09:00</option>
+                                        <option value="19:00">19:00</option>
+                                        <option value="20:00" selected>20:00</option>
+                                        <option value="21:00">21:00</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 說明文字 -->
+                        <div class="mt-4 p-3 bg-blue-50 rounded-lg">
+                            <p class="text-sm text-blue-800">
+                                <span class="font-medium">📋 每日摘要:</span> 顯示當天新增的產品數量和熱門產品
+                            </p>
+                            <p class="text-sm text-blue-800 mt-1">
+                                <span class="font-medium">📊 每週報告:</span> 包含一週內的所有產品、價格趨勢和庫存統計
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
@@ -428,6 +488,13 @@
                 document.getElementById('stopBtn').addEventListener('click', () => this.stopTracking());
                 document.getElementById('testBtn').addEventListener('click', () => this.testProducts());
                 document.getElementById('productType').addEventListener('change', (e) => this.updateProductOptions(e.target.value));
+                
+                // 摘要通知設定事件
+                document.getElementById('dailySummaryEnabled').addEventListener('change', (e) => this.toggleSummarySettings('daily', e.target.checked));
+                document.getElementById('weeklySummaryEnabled').addEventListener('change', (e) => this.toggleSummarySettings('weekly', e.target.checked));
+                document.getElementById('dailySummaryTime').addEventListener('change', () => this.saveSummarySettings());
+                document.getElementById('weeklySummaryTime').addEventListener('change', () => this.saveSummarySettings());
+                document.getElementById('weeklyDay').addEventListener('change', () => this.saveSummarySettings());
             }
 
             async loadConfig() {
@@ -438,9 +505,83 @@
                 try {
                     const response = await fetch(`/api/users/${this.currentUser.userId}/config`);
                     this.config = await response.json();
+                    this.updateSummaryUI();
                 } catch (error) {
                     console.error('載入用戶配置失敗:', error);
                     this.config = { trackingRules: [] };
+                }
+            }
+
+            updateSummaryUI() {
+                const summarySettings = this.config.summarySettings || {};
+                
+                // 更新每日摘要設定
+                const dailyEnabled = document.getElementById('dailySummaryEnabled');
+                const dailyTime = document.getElementById('dailySummaryTime');
+                
+                if (dailyEnabled && dailyTime) {
+                    dailyEnabled.checked = summarySettings.dailySummary?.enabled || false;
+                    dailyTime.disabled = !dailyEnabled.checked;
+                    dailyTime.value = summarySettings.dailySummary?.time || '08:00';
+                }
+                
+                // 更新每週摘要設定
+                const weeklyEnabled = document.getElementById('weeklySummaryEnabled');
+                const weeklyDay = document.getElementById('weeklyDay');
+                const weeklyTime = document.getElementById('weeklySummaryTime');
+                
+                if (weeklyEnabled && weeklyDay && weeklyTime) {
+                    weeklyEnabled.checked = summarySettings.weeklySummary?.enabled || false;
+                    weeklyDay.disabled = !weeklyEnabled.checked;
+                    weeklyTime.disabled = !weeklyEnabled.checked;
+                    weeklyDay.value = summarySettings.weeklySummary?.day || '7';
+                    weeklyTime.value = summarySettings.weeklySummary?.time || '20:00';
+                }
+            }
+
+            toggleSummarySettings(type, enabled) {
+                if (type === 'daily') {
+                    document.getElementById('dailySummaryTime').disabled = !enabled;
+                } else if (type === 'weekly') {
+                    document.getElementById('weeklyDay').disabled = !enabled;
+                    document.getElementById('weeklySummaryTime').disabled = !enabled;
+                }
+                this.saveSummarySettings();
+            }
+
+            async saveSummarySettings() {
+                try {
+                    if (!this.isLiffReady || !this.currentUser) {
+                        return;
+                    }
+
+                    // 確保 config 有 summarySettings 屬性
+                    if (!this.config.summarySettings) {
+                        this.config.summarySettings = {};
+                    }
+
+                    // 收集設定值
+                    const dailyEnabled = document.getElementById('dailySummaryEnabled').checked;
+                    const dailyTime = document.getElementById('dailySummaryTime').value;
+                    const weeklyEnabled = document.getElementById('weeklySummaryEnabled').checked;
+                    const weeklyDay = document.getElementById('weeklyDay').value;
+                    const weeklyTime = document.getElementById('weeklySummaryTime').value;
+
+                    this.config.summarySettings = {
+                        dailySummary: {
+                            enabled: dailyEnabled,
+                            time: dailyTime
+                        },
+                        weeklySummary: {
+                            enabled: weeklyEnabled,
+                            day: parseInt(weeklyDay),
+                            time: weeklyTime
+                        }
+                    };
+
+                    await this.saveConfig();
+                } catch (error) {
+                    console.error('儲存摘要設定失敗:', error);
                 }
             }
 

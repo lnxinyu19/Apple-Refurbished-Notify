@@ -307,6 +307,11 @@ class AppleTracker {
     if (!firebaseReady) {
       console.log("Firebase未連接，部分功能可能無法使用");
     }
+    
+    // 啟動摘要通知定時檢查 (每小時檢查一次)
+    if (firebaseReady) {
+      this.startSummaryScheduler();
+    }
   }
 
   async loadConfig() {
@@ -1119,8 +1124,182 @@ class AppleTracker {
     });
   }
 
+  // 摘要通知排程
+  startSummaryScheduler() {
+    console.log("🕐 啟動摘要通知排程器");
+    
+    // 每小時檢查一次是否需要發送摘要
+    this.summaryInterval = setInterval(async () => {
+      const now = new Date();
+      console.log(`檢查摘要通知 - ${now.toLocaleString('zh-TW')}`);
+      
+      try {
+        await this.sendDailySummary();
+        await this.sendWeeklySummary();
+      } catch (error) {
+        console.error('摘要通知檢查失敗:', error);
+      }
+    }, 60 * 60 * 1000); // 每小時檢查
+    
+    // 立即檢查一次
+    setTimeout(async () => {
+      try {
+        await this.sendDailySummary();
+        await this.sendWeeklySummary();
+      } catch (error) {
+        console.error('初始摘要通知檢查失敗:', error);
+      }
+    }, 5000); // 5秒後執行
+  }
+
+  // 摘要通知功能
+  async sendDailySummary() {
+    try {
+      const activeUsers = await this.firebaseService.getActiveUsers();
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      for (const user of activeUsers) {
+        const summarySettings = user.summarySettings?.dailySummary;
+        if (!summarySettings?.enabled) continue;
+        
+        // 檢查時間是否匹配（簡單實作，實際應該用 cron job）
+        const now = new Date();
+        const [hour, minute] = summarySettings.time.split(':');
+        if (now.getHours() !== parseInt(hour)) continue;
+        
+        const summary = await this.generateDailySummary(yesterday);
+        if (summary) {
+          await this.notificationManager.sendNotification(user, summary);
+        }
+      }
+    } catch (error) {
+      console.error('發送每日摘要失敗:', error);
+    }
+  }
+
+  async sendWeeklySummary() {
+    try {
+      const activeUsers = await this.firebaseService.getActiveUsers();
+      const lastWeek = new Date();
+      lastWeek.setDate(lastWeek.getDate() - 7);
+      
+      for (const user of activeUsers) {
+        const summarySettings = user.summarySettings?.weeklySummary;
+        if (!summarySettings?.enabled) continue;
+        
+        // 檢查是否為指定的星期幾和時間
+        const now = new Date();
+        if (now.getDay() !== summarySettings.day) continue;
+        
+        const [hour, minute] = summarySettings.time.split(':');
+        if (now.getHours() !== parseInt(hour)) continue;
+        
+        const summary = await this.generateWeeklySummary(lastWeek, now);
+        if (summary) {
+          await this.notificationManager.sendNotification(user, summary);
+        }
+      }
+    } catch (error) {
+      console.error('發送每週摘要失敗:', error);
+    }
+  }
+
+  async generateDailySummary(date) {
+    try {
+      const products = await this.firebaseService.getProductsFromDate(date);
+      if (products.length === 0) {
+        return `📊 每日摘要 (${date.toLocaleDateString('zh-TW')})\n\n昨日沒有新的整修產品上架。`;
+      }
+      
+      const categories = {};
+      let totalValue = 0;
+      
+      products.forEach(product => {
+        const category = product.specs?.category || 'Other';
+        if (!categories[category]) categories[category] = 0;
+        categories[category]++;
+        
+        const price = parseInt(product.price?.replace(/[^\d]/g, '') || '0');
+        totalValue += price;
+      });
+      
+      let message = `📊 每日摘要 (${date.toLocaleDateString('zh-TW')})\n\n`;
+      message += `🆕 新產品: ${products.length} 個\n`;
+      message += `💰 總價值: NT$${totalValue.toLocaleString()}\n\n`;
+      
+      message += `📱 分類統計:\n`;
+      Object.entries(categories).forEach(([category, count]) => {
+        message += `• ${category}: ${count} 個\n`;
+      });
+      
+      // 顯示熱門產品（前3個）
+      if (products.length > 0) {
+        message += `\n🔥 熱門產品:\n`;
+        products.slice(0, 3).forEach((product, index) => {
+          message += `${index + 1}. ${product.name}\n   💰 ${product.price}\n`;
+        });
+      }
+      
+      return message;
+    } catch (error) {
+      console.error('生成每日摘要失敗:', error);
+      return null;
+    }
+  }
+
+  async generateWeeklySummary(startDate, endDate) {
+    try {
+      const products = await this.firebaseService.getProductsFromDateRange(startDate, endDate);
+      if (products.length === 0) {
+        return `📊 週報告 (${startDate.toLocaleDateString('zh-TW')} - ${endDate.toLocaleDateString('zh-TW')})\n\n本週沒有新的整修產品。`;
+      }
+      
+      let message = `📊 週報告 (${startDate.toLocaleDateString('zh-TW')} - ${endDate.toLocaleDateString('zh-TW')})\n\n`;
+      message += `🆕 本週新產品: ${products.length} 個\n`;
+      
+      // 價格統計
+      const prices = products.map(p => parseInt(p.price?.replace(/[^\d]/g, '') || '0')).filter(p => p > 0);
+      if (prices.length > 0) {
+        const avgPrice = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+        const minPrice = Math.min(...prices);
+        const maxPrice = Math.max(...prices);
+        
+        message += `💰 價格區間: NT$${minPrice.toLocaleString()} - NT$${maxPrice.toLocaleString()}\n`;
+        message += `💰 平均價格: NT$${avgPrice.toLocaleString()}\n\n`;
+      }
+      
+      // 熱門分類
+      const categories = {};
+      products.forEach(product => {
+        const category = product.specs?.productType || 'Other';
+        if (!categories[category]) categories[category] = 0;
+        categories[category]++;
+      });
+      
+      message += `📱 產品分類:\n`;
+      Object.entries(categories)
+        .sort(([,a], [,b]) => b - a)
+        .forEach(([category, count]) => {
+          message += `• ${category}: ${count} 個\n`;
+        });
+      
+      return message;
+    } catch (error) {
+      console.error('生成週報告失敗:', error);
+      return null;
+    }
+  }
+
   async cleanup() {
     await this.stopTracking();
+    
+    // 清理摘要排程
+    if (this.summaryInterval) {
+      clearInterval(this.summaryInterval);
+      this.summaryInterval = null;
+    }
+    
     if (this.browser) {
       await this.browser.close();
     }
