@@ -407,6 +407,15 @@ class AppleTracker {
 
         message += `${globalIndex}. ${shortName}\n`;
         message += `💰 ${product.price}\n`;
+        
+        // 顯示匹配的規則
+        if (product.matchingRules && product.matchingRules.length > 0) {
+          if (product.matchingRules.length === 1) {
+            message += `📋 符合規則: ${product.matchingRules[0]}\n`;
+          } else {
+            message += `📋 符合規則: ${product.matchingRules.join(', ')}\n`;
+          }
+        }
 
         if (product.url) {
           const shortUrl = await this.shortenUrl(product.url);
@@ -1003,20 +1012,27 @@ class AppleTracker {
           user.lineUserId
         );
 
-        let userNewMatches = [];
+        const productRuleMap = new Map(); // 記錄每個產品匹配到的規則
 
         for (const rule of userRules) {
           const newMatches = this.filterProducts(newProducts, rule.filters);
 
-          if (newMatches.length > 0) {
-            userNewMatches = userNewMatches.concat(newMatches);
+          for (const product of newMatches) {
+            if (!productRuleMap.has(product.url)) {
+              productRuleMap.set(product.url, {
+                product: product,
+                matchingRules: []
+              });
+            }
+            productRuleMap.get(product.url).matchingRules.push(rule.name);
           }
         }
 
-        userNewMatches = userNewMatches.filter(
-          (product, index, self) =>
-            index === self.findIndex((p) => p.url === product.url)
-        );
+        // 將產品和對應的規則資訊轉換為陣列
+        const userNewMatches = Array.from(productRuleMap.values()).map(item => ({
+          ...item.product,
+          matchingRules: item.matchingRules
+        }));
 
         if (userNewMatches.length > 0) {
           const messages = await this.formatNewProductMessage(userNewMatches);
