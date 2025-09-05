@@ -143,11 +143,18 @@ class AppleTracker {
         const userId = req.params.userId;
 
         if (!this.firebaseService.initialized) {
-          return res.json({ trackingRules: [] });
+          return res.json({ trackingRules: [], summarySettings: {} });
         }
 
-        const rules = await this.firebaseService.getUserTrackingRules(userId);
-        res.json({ trackingRules: rules });
+        const [rules, user] = await Promise.all([
+          this.firebaseService.getUserTrackingRules(userId),
+          this.firebaseService.getOrCreateUser(userId)
+        ]);
+        
+        res.json({ 
+          trackingRules: rules,
+          summarySettings: user.summarySettings || {}
+        });
       } catch (error) {
         console.error("取得用戶配置錯誤:", error);
         res.status(500).json({ error: error.message });
@@ -157,7 +164,7 @@ class AppleTracker {
     this.app.post("/api/users/:userId/config", async (req, res) => {
       try {
         const userId = req.params.userId;
-        const { trackingRules } = req.body;
+        const { trackingRules, summarySettings } = req.body;
 
         if (!this.firebaseService.initialized) {
           return res.status(503).json({ error: "Firebase 未連接" });
@@ -165,31 +172,39 @@ class AppleTracker {
 
         await this.firebaseService.getOrCreateUser(userId);
 
-        const existingRules = await this.firebaseService.getUserTrackingRules(
-          userId
-        );
-        const existingRuleIds = new Set(existingRules.map((r) => r.id));
-        const newRuleIds = new Set(trackingRules.map((r) => r.id));
-
-        for (const rule of existingRules) {
-          if (!newRuleIds.has(rule.id)) {
-            await this.firebaseService.deleteTrackingRule(userId, rule.id);
-          }
+        // 儲存摘要設定
+        if (summarySettings !== undefined) {
+          await this.firebaseService.updateUserSummarySettings(userId, summarySettings);
         }
 
-        // 新增或更新規則
-        for (const rule of trackingRules) {
-          if (existingRuleIds.has(rule.id)) {
-            await this.firebaseService.updateTrackingRule(
-              userId,
-              rule.id,
-              rule
-            );
-          } else {
-            const createdId = await this.firebaseService.addTrackingRule(
-              userId,
-              rule
-            );
+        // 處理追蹤規則
+        if (trackingRules && Array.isArray(trackingRules)) {
+          const existingRules = await this.firebaseService.getUserTrackingRules(
+            userId
+          );
+          const existingRuleIds = new Set(existingRules.map((r) => r.id));
+          const newRuleIds = new Set(trackingRules.map((r) => r.id));
+
+          for (const rule of existingRules) {
+            if (!newRuleIds.has(rule.id)) {
+              await this.firebaseService.deleteTrackingRule(userId, rule.id);
+            }
+          }
+
+          // 新增或更新規則
+          for (const rule of trackingRules) {
+            if (existingRuleIds.has(rule.id)) {
+              await this.firebaseService.updateTrackingRule(
+                userId,
+                rule.id,
+                rule
+              );
+            } else {
+              const createdId = await this.firebaseService.addTrackingRule(
+                userId,
+                rule
+              );
+            }
           }
         }
 
