@@ -107,6 +107,14 @@ class FirebaseService {
     });
   }
 
+  async updateUserLastSummaryDate(lineUserId, date) {
+    const userRef = this.db.collection('users').doc(lineUserId);
+    await userRef.update({
+      lastSummaryDate: date,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  }
+
   // 摘要功能相關方法
   async getProductsFromDate(date) {
     try {

@@ -6,7 +6,8 @@
       "Bash(npm start)",
       "Bash(pkill:*)",
       "Bash(git checkout:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

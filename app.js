@@ -277,6 +277,7 @@ class AppleTracker {
       }
     });
 
+
     this.app.post("/webhook/line", express.json(), async (req, res) => {
       try {
         if (!req.body.events || req.body.events.length === 0) {
@@ -323,7 +324,6 @@ class AppleTracker {
       console.log("Firebase未連接，部分功能可能無法使用");
     }
     
-    // 啟動摘要通知定時檢查 (每小時檢查一次)
     if (firebaseReady) {
       this.startSummaryScheduler();
     }
@@ -1141,16 +1141,14 @@ class AppleTracker {
 
   // 摘要通知排程
   startSummaryScheduler() {
-    console.log("🕐 啟動摘要通知排程器");
-    
-    // 每小時檢查一次是否需要發送摘要
+    // 每10分鐘檢查一次是否需要發送摘要
     this.summaryInterval = setInterval(async () => {
       try {
         await this.sendDailySummary();
       } catch (error) {
         console.error('摘要通知檢查失敗:', error);
       }
-    }, 60 * 60 * 1000); // 每小時檢查
+    }, 10 * 60 * 1000);
     
     // 立即檢查一次
     setTimeout(async () => {
@@ -1159,7 +1157,7 @@ class AppleTracker {
       } catch (error) {
         console.error('初始摘要通知檢查失敗:', error);
       }
-    }, 5000); // 5秒後執行
+    }, 5000);
   }
 
   // 摘要通知功能
@@ -1168,19 +1166,32 @@ class AppleTracker {
       const activeUsers = await this.firebaseService.getActiveUsers();
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
+      const today = new Date().toISOString().split('T')[0];
       
       for (const user of activeUsers) {
         const summarySettings = user.summarySettings?.dailySummary;
         if (!summarySettings?.enabled) continue;
         
-        // 檢查時間是否匹配（簡單實作，實際應該用 cron job）
+        // 檢查是否今天已經發送過摘要
+        const lastSentDate = user.lastSummaryDate;
+        if (lastSentDate === today) continue;
+        
+        // 檢查時間是否匹配
         const now = new Date();
-        const [hour, minute] = summarySettings.time.split(':');
-        if (now.getHours() !== parseInt(hour)) continue;
+        const [hour] = summarySettings.time.split(':');
+        const scheduledHour = parseInt(hour);
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        
+        // 時間需要匹配小時，且當前時間要大於等於設定的分鐘
+        const timeMatched = currentHour === scheduledHour && currentMinute >= parseInt(summarySettings.time.split(':')[1]);
+        
+        if (!timeMatched) continue;
         
         const summary = await this.generateDailySummary(yesterday);
         if (summary) {
           await this.notificationManager.sendNotification(user, summary);
+          await this.firebaseService.updateUserLastSummaryDate(user.lineUserId, today);
         }
       }
     } catch (error) {
@@ -1191,7 +1202,13 @@ class AppleTracker {
   async generateDailySummary(date) {
     try {
       const newProducts = await this.firebaseService.getProductsFromDate(date);
-      const totalProducts = await this.firebaseService.getAllProducts();
+      let totalProducts = await this.firebaseService.getAllProducts();
+      
+      // 如果 Firebase 中沒有產品資料，直接爬取當前產品數量
+      if (totalProducts.length === 0) {
+        const currentProducts = await this.scrapeProducts();
+        totalProducts = currentProducts;
+      }
       
       if (newProducts.length === 0) {
         return `📊 每日摘要 (${date.toLocaleDateString('zh-TW')})\n\n昨日沒有新的整修產品上架。\n📱 目前總數: ${totalProducts.length} 個`;
@@ -1264,7 +1281,6 @@ class AppleTracker {
   async cleanup() {
     await this.stopTracking();
     
-    // 清理摘要排程
     if (this.summaryInterval) {
       clearInterval(this.summaryInterval);
       this.summaryInterval = null;
