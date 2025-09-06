@@ -230,6 +230,57 @@ class AppleTracker {
       }
     });
 
+    this.app.post("/api/users/:userId/test-summary", async (req, res) => {
+      try {
+        const { userId } = req.params;
+
+        if (!this.firebaseService.initialized) {
+          return res.status(503).json({ error: "Firebase 未連接" });
+        }
+
+        // 調用現有的測試摘要方法
+        const summaryMessage = await this.testDailySummary(userId);
+        
+        // 解析摘要內容，提供更結構化的回應
+        const lines = summaryMessage.split('\n');
+        let summary = null;
+        let products = [];
+        
+        // 尋找摘要內容
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (line.includes('測試摘要內容:')) {
+            // 從分隔線後開始抓取摘要
+            const dashLineIndex = lines.findIndex((l, idx) => idx > i && l.includes('─'));
+            if (dashLineIndex !== -1) {
+              summary = lines.slice(dashLineIndex + 1).join('\n').trim();
+            }
+            break;
+          }
+        }
+
+        // 嘗試獲取昨天的產品數據來提供更好的展示
+        try {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const recentProducts = await this.firebaseService.getProductsFromDate(yesterday);
+          products = recentProducts.slice(0, 5); // 限制顯示前5個產品
+        } catch (error) {
+          console.log('無法獲取產品數據:', error);
+        }
+
+        res.json({ 
+          success: true,
+          message: "測試摘要已生成",
+          summary: summary || summaryMessage,
+          products: products
+        });
+      } catch (error) {
+        console.error('測試摘要API失敗:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     this.app.post("/api/track/start", async (req, res) => {
       try {
         if (this.isTracking) {
@@ -521,6 +572,14 @@ class AppleTracker {
         case "/test":
           replyMessage = "🧪 測試通知\n✅ 系統運作正常！";
           break;
+          
+        case "/test-summary":
+          replyMessage = await this.testDailySummary(userId);
+          break;
+          
+        case "/force-summary":
+          replyMessage = await this.forceSendSummary(userId);
+          break;
 
         case "/rules":
           replyMessage = await this.getUserRulesMessage(userId);
@@ -719,6 +778,7 @@ class AppleTracker {
       `• /delete - 刪除追蹤規則\n` +
       `• /delete 1 - 刪除第1個規則\n` +
       `• /test - 測試Bot連接\n` +
+      `• /test-summary - 測試每日摘要功能\n` +
       `• /help - 顯示此訊息\n\n` +
       `📤 啟用通知方式: ${activeProviders.join(", ")}\n\n` +
       (liffId
@@ -1244,6 +1304,92 @@ class AppleTracker {
     }
   }
 
+  // 測試摘要功能
+  async testDailySummary(userId) {
+    try {
+      console.log(`開始測試用戶 ${userId} 的摘要功能`);
+      
+      // 獲取用戶資料
+      const user = await this.firebaseService.getUser(userId);
+      if (!user) {
+        return "❌ 找不到用戶資料";
+      }
+      
+      console.log('用戶資料:', user);
+      
+      // 檢查摘要設定
+      const summarySettings = user.summarySettings?.dailySummary;
+      if (!summarySettings?.enabled) {
+        return "❌ 每日摘要功能未啟用\n請先到網頁設定中啟用摘要功能";
+      }
+      
+      // 顯示設定資訊
+      let testMessage = "🧪 摘要功能測試\n\n";
+      testMessage += `✅ 摘要功能已啟用\n`;
+      testMessage += `⏰ 設定時間: ${summarySettings.time}\n`;
+      testMessage += `📅 上次發送: ${user.lastSummaryDate || '從未發送'}\n\n`;
+      
+      // 生成測試摘要
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      console.log('開始生成測試摘要...');
+      const summary = await this.generateDailySummary(yesterday);
+      
+      if (summary) {
+        testMessage += "📊 測試摘要內容:\n";
+        testMessage += "─".repeat(20) + "\n";
+        testMessage += summary;
+      } else {
+        testMessage += "❌ 無法生成摘要內容";
+      }
+      
+      return testMessage;
+    } catch (error) {
+      console.error('測試摘要功能失敗:', error);
+      return "❌ 測試摘要功能時發生錯誤: " + error.message;
+    }
+  }
+
+  // 強制發送摘要功能（忽略時間檢查）
+  async forceSendSummary(userId) {
+    try {
+      console.log(`強制發送摘要給用戶 ${userId}`);
+      
+      // 獲取用戶資料
+      const user = await this.firebaseService.getUser(userId);
+      if (!user) {
+        return "❌ 找不到用戶資料";
+      }
+      
+      // 檢查摘要設定
+      const summarySettings = user.summarySettings?.dailySummary;
+      if (!summarySettings?.enabled) {
+        return "❌ 每日摘要功能未啟用\n請先到網頁設定中啟用摘要功能";
+      }
+      
+      // 生成摘要
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      const summary = await this.generateDailySummary(yesterday);
+      if (!summary) {
+        return "❌ 無法生成摘要內容";
+      }
+      
+      // 直接發送摘要
+      await this.notificationManager.sendNotification(user, summary);
+      
+      // 更新最後發送日期
+      const today = new Date().toISOString().split('T')[0];
+      await this.firebaseService.updateUserLastSummaryDate(user.lineUserId, today);
+      
+      return "✅ 摘要已強制發送！\n請檢查你的通知";
+    } catch (error) {
+      console.error('強制發送摘要失敗:', error);
+      return "❌ 強制發送摘要時發生錯誤: " + error.message;
+    }
+  }
 
   // 產品分類方法
   categorizeProducts(products) {

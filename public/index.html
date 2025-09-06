@@ -209,12 +209,17 @@
             <div class="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 space-y-3 sm:space-y-0">
                     <h2 class="text-lg sm:text-xl font-semibold text-gray-900">🔍 產品測試</h2>
-                    <button id="testBtn" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm font-medium transition-colors self-start sm:self-auto">
-                        🧪 測試爬取
-                    </button>
+                    <div class="flex space-x-2 self-start sm:self-auto">
+                        <button id="testBtn" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm font-medium transition-colors">
+                            🧪 測試爬取
+                        </button>
+                        <button id="testSummaryBtn" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium transition-colors">
+                            📊 測試摘要
+                        </button>
+                    </div>
                 </div>
                 
-                <p class="text-gray-600 mb-4 text-sm sm:text-base">點擊按鈕測試產品爬取功能，查看目前可用的整修機產品</p>
+                <p class="text-gray-600 mb-4 text-sm sm:text-base">點擊「測試爬取」測試產品爬取功能，點擊「測試摘要」測試每日摘要通知</p>
                 
                 <div id="testResults" class="hidden">
                     <h3 class="text-base sm:text-lg font-medium text-gray-900 mb-3 sm:mb-4">測試結果</h3>
@@ -471,6 +476,7 @@
                 document.getElementById('startBtn').addEventListener('click', () => this.startTracking());
                 document.getElementById('stopBtn').addEventListener('click', () => this.stopTracking());
                 document.getElementById('testBtn').addEventListener('click', () => this.testProducts());
+                document.getElementById('testSummaryBtn').addEventListener('click', () => this.testSummary());
                 document.getElementById('productType').addEventListener('change', (e) => this.updateProductOptions(e.target.value));
                 
                 // 摘要通知設定事件
@@ -1078,6 +1084,78 @@
                 } finally {
                     btn.disabled = false;
                     btn.textContent = '🧪 測試爬取';
+                }
+            }
+
+            async testSummary() {
+                const btn = document.getElementById('testSummaryBtn');
+                const resultsDiv = document.getElementById('testResults');
+                const productsDiv = document.getElementById('productsList');
+                
+                if (!this.isLiffReady || !this.currentUser) {
+                    alert('請透過 LINE 登入後再測試摘要功能');
+                    return;
+                }
+                
+                btn.disabled = true;
+                btn.textContent = '🔄 測試中...';
+                
+                resultsDiv.classList.remove('hidden');
+                productsDiv.innerHTML = '<div class="text-center py-8 text-gray-500">正在產生摘要通知，請稍候...</div>';
+                
+                try {
+                    const response = await fetch(`/api/users/${this.currentUser.userId}/test-summary`, {
+                        method: 'POST'
+                    });
+                    const result = await response.json();
+                    
+                    if (result.error) {
+                        productsDiv.innerHTML = `<div class="text-center py-8 text-red-500">測試失敗: ${result.error}</div>`;
+                        return;
+                    }
+                    
+                    let htmlContent = `
+                        <div class="mb-4 p-4 bg-green-50 rounded-lg">
+                            <h4 class="font-medium text-green-900">✅ ${result.message}</h4>
+                        </div>
+                    `;
+                    
+                    if (result.summary) {
+                        htmlContent += `
+                            <div class="mb-4 p-4 border rounded-lg bg-blue-50">
+                                <h4 class="font-medium text-blue-900 mb-2">📋 摘要內容:</h4>
+                                <div class="text-sm text-blue-800 whitespace-pre-line">${result.summary}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    if (result.products && result.products.length > 0) {
+                        htmlContent += '<h4 class="font-medium text-gray-900 mb-3">今日新產品:</h4>';
+                        htmlContent += result.products.map(product => `
+                            <div class="flex flex-col sm:flex-row p-3 sm:p-4 border rounded-lg bg-gray-50 space-y-3 sm:space-y-0 mb-3">
+                                <img src="${product.image || ''}" alt="${product.name}" 
+                                     class="w-full h-32 sm:w-16 sm:h-16 rounded object-cover sm:mr-4 bg-gray-200 flex-shrink-0" 
+                                     onerror="this.style.display='none'">
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="font-medium text-gray-900 mb-1 text-sm sm:text-base break-words">
+                                        ${product.url ? `<a href="${product.url}" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline">${product.name}</a>` : product.name}
+                                    </h4>
+                                    <p class="text-base sm:text-lg font-semibold text-green-600 mb-1">${product.price || '價格未知'}</p>
+                                    <p class="text-xs sm:text-sm text-gray-600 break-words">${this.formatSpecs(product.specs)}</p>
+                                    ${product.url ? '<p class="text-xs text-blue-500 mt-1">🔗 點擊產品名稱查看詳情</p>' : ''}
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+                    
+                    productsDiv.innerHTML = htmlContent;
+                    
+                } catch (error) {
+                    console.error('測試摘要失敗:', error);
+                    productsDiv.innerHTML = '<div class="text-center py-8 text-red-500">測試摘要失敗，請檢查網路連線</div>';
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = '📊 測試摘要';
                 }
             }
 
