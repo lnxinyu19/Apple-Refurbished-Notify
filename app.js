@@ -52,6 +52,14 @@ class AppleTracker {
       });
     });
 
+    // 開發環境設定端點
+    this.app.get("/api/dev-config", (req, res) => {
+      res.json({
+        showTestFeatures: process.env.NODE_ENV !== "production" || process.env.SHOW_TEST_FEATURES === "true",
+        environment: process.env.NODE_ENV || "development"
+      });
+    });
+
     // LINE Login 授權端點
     this.app.get("/auth/line", (req, res) => {
       const channelId = process.env.LINE_LOGIN_CHANNEL_ID;

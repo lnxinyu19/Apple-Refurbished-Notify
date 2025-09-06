@@ -311,6 +311,7 @@
                 this.updateUserInfo();
                 this.loadVersion();
                 this.checkStatus();
+                this.checkDevConfig();
                 
                 setInterval(() => this.checkStatus(), 5 * 60 * 1000);
             }
@@ -680,6 +681,38 @@
                     document.getElementById('versionInfo').textContent = `v${versionData.version}`;
                 } catch (error) {
                     console.error('載入版本資訊失敗:', error);
+                }
+            }
+
+            async checkDevConfig() {
+                try {
+                    const response = await fetch('/api/dev-config');
+                    const devConfig = await response.json();
+                    
+                    // 根據環境配置控制測試按鈕顯示
+                    const testSummaryBtn = document.getElementById('testSummaryBtn');
+                    if (testSummaryBtn) {
+                        if (devConfig.showTestFeatures) {
+                            testSummaryBtn.style.display = 'inline-block';
+                        } else {
+                            testSummaryBtn.style.display = 'none';
+                        }
+                    }
+                    
+                    // 更新說明文字
+                    const descriptionElement = document.querySelector('.text-gray-600.mb-4');
+                    if (descriptionElement && devConfig.showTestFeatures) {
+                        descriptionElement.textContent = '點擊「測試爬取」測試產品爬取功能，點擊「測試摘要」測試每日摘要通知';
+                    } else if (descriptionElement) {
+                        descriptionElement.textContent = '點擊按鈕測試產品爬取功能，查看目前可用的整修機產品';
+                    }
+                } catch (error) {
+                    console.error('載入開發環境配置失敗:', error);
+                    // 錯誤時隱藏測試按鈕
+                    const testSummaryBtn = document.getElementById('testSummaryBtn');
+                    if (testSummaryBtn) {
+                        testSummaryBtn.style.display = 'none';
+                    }
                 }
             }
 
