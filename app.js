@@ -372,9 +372,18 @@ class AppleTracker {
     // 檢查並自動重啟追蹤
     if (firebaseReady) {
       const systemState = await this.firebaseService.getSystemState();
+      console.log("系統狀態檢查:", { 
+        savedState: systemState.isTracking, 
+        currentState: this.isTracking 
+      });
+      
       if (systemState.isTracking && !this.isTracking) {
-        console.log("服務重啟，自動重新啟動追蹤");
+        console.log("🔄 服務重啟，自動重新啟動追蹤");
         await this.startTracking();
+      } else if (systemState.isTracking && this.isTracking) {
+        console.log("✅ 追蹤狀態已同步");
+      } else {
+        console.log("ℹ️ 系統未設定為追蹤模式");
       }
     }
 
@@ -1048,7 +1057,11 @@ class AppleTracker {
     console.log("🎯 開始追蹤產品...");
 
     if (this.firebaseService.initialized) {
+      console.log("💾 保存追蹤狀態到 Firebase...");
       await this.firebaseService.saveSystemState(true);
+      console.log("✅ 追蹤狀態已保存");
+    } else {
+      console.log("⚠️ Firebase 未初始化，無法保存追蹤狀態");
     }
 
     await this.trackProducts();
@@ -1056,17 +1069,26 @@ class AppleTracker {
     this.trackingInterval = setInterval(async () => {
       await this.trackProducts();
     }, 60 * 60 * 1000);
+    
+    console.log("⏱️ 追蹤定時器已啟動（每小時檢查一次）");
   }
 
   async stopTracking() {
     this.isTracking = false;
+    console.log("⏹️ 停止追蹤產品...");
+    
     if (this.trackingInterval) {
       clearInterval(this.trackingInterval);
       this.trackingInterval = null;
+      console.log("⏱️ 追蹤定時器已停止");
     }
 
     if (this.firebaseService.initialized) {
+      console.log("💾 保存停止狀態到 Firebase...");
       await this.firebaseService.saveSystemState(false);
+      console.log("✅ 停止狀態已保存");
+    } else {
+      console.log("⚠️ Firebase 未初始化，無法保存停止狀態");
     }
   }
 
@@ -1091,6 +1113,7 @@ class AppleTracker {
       }
 
       const activeUsers = await this.firebaseService.getActiveUsers();
+      console.log(`📋 找到 ${activeUsers.length} 位活躍用戶`);
 
       const allNewMatches = [];
       let notifiedUsersCount = 0;
@@ -1099,6 +1122,7 @@ class AppleTracker {
         const userRules = await this.firebaseService.getUserTrackingRules(
           user.lineUserId
         );
+        console.log(`👤 用戶 ${user.lineUserId} 有 ${userRules.length} 個追蹤規則`);
 
         const productRuleMap = new Map(); // 記錄每個產品匹配到的規則
 

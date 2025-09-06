@@ -164,26 +164,7 @@ class FirebaseService {
   }
 
   // 系統狀態管理
-  async getSystemState() {
-    try {
-      const doc = await this.db.collection('system').doc('state').get();
-      return doc.exists ? doc.data() : null;
-    } catch (error) {
-      console.error('獲取系統狀態失敗:', error);
-      return null;
-    }
-  }
-
-  async saveSystemState(state) {
-    try {
-      await this.db.collection('system').doc('state').set({
-        ...state,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-    } catch (error) {
-      console.error('保存系統狀態失敗:', error);
-    }
-  }
+  // 已移除重複的方法，統一使用底部的 getSystemState/saveSystemState
 
   // 追蹤規則管理
   async getUserTrackingRules(lineUserId) {
@@ -317,21 +298,26 @@ class FirebaseService {
   async getSystemState() {
     try {
       const doc = await this.db.collection('system').doc('tracking_state').get();
-      return doc.exists ? doc.data() : { isTracking: false };
+      const state = doc.exists ? doc.data() : { isTracking: false };
+      console.log('📖 從 Firebase 讀取系統狀態:', state);
+      return state;
     } catch (error) {
-      console.error('取得系統狀態錯誤:', error);
+      console.error('❌ 取得系統狀態錯誤:', error);
       return { isTracking: false };
     }
   }
 
   async saveSystemState(isTracking) {
     try {
-      await this.db.collection('system').doc('tracking_state').set({
+      const stateData = {
         isTracking,
         lastUpdated: admin.firestore.FieldValue.serverTimestamp()
-      });
+      };
+      await this.db.collection('system').doc('tracking_state').set(stateData);
+      console.log('💾 系統狀態已保存到 Firebase:', { isTracking });
     } catch (error) {
-      console.error('儲存系統狀態錯誤:', error);
+      console.error('❌ 儲存系統狀態錯誤:', error);
+      throw error; // 重新拋出錯誤，讓調用者知道保存失敗
     }
   }
 
