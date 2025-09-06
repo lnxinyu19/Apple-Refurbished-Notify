@@ -4,8 +4,8 @@
   "description": "Apple refurbished products tracker and notifier",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon app.js",
-    "dev": "node app.js",
+    "start": "node app.js",
+    "dev": "nodemon app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
