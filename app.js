@@ -1270,13 +1270,19 @@ class AppleTracker {
         
         // 檢查時間是否匹配
         const now = new Date();
-        const [hour] = summarySettings.time.split(':');
+        const [hour, minute] = summarySettings.time.split(':');
         const scheduledHour = parseInt(hour);
+        const scheduledMinute = parseInt(minute);
         const currentHour = now.getHours();
         const currentMinute = now.getMinutes();
         
-        // 時間需要匹配小時，且當前時間要大於等於設定的分鐘
-        const timeMatched = currentHour === scheduledHour && currentMinute >= parseInt(summarySettings.time.split(':')[1]);
+        // 計算當前時間的總分鐘數和預定時間的總分鐘數
+        const currentTotalMinutes = currentHour * 60 + currentMinute;
+        const scheduledTotalMinutes = scheduledHour * 60 + scheduledMinute;
+        
+        // 檢查是否已經過了預定時間（允許10分鐘的誤差範圍）
+        const timeMatched = currentTotalMinutes >= scheduledTotalMinutes && 
+                           currentTotalMinutes <= scheduledTotalMinutes + 10;
         
         if (!timeMatched) continue;
         
