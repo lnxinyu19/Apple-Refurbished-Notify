@@ -1280,9 +1280,9 @@ class AppleTracker {
         const currentTotalMinutes = currentHour * 60 + currentMinute;
         const scheduledTotalMinutes = scheduledHour * 60 + scheduledMinute;
         
-        // 檢查是否已經過了預定時間（允許10分鐘的誤差範圍）
-        const timeMatched = currentTotalMinutes >= scheduledTotalMinutes && 
-                           currentTotalMinutes <= scheduledTotalMinutes + 10;
+        // 檢查是否已經到了或過了預定時間
+        // 如果今天還沒發送過摘要且已經過了預定時間，就發送
+        const timeMatched = currentTotalMinutes >= scheduledTotalMinutes;
         
         if (!timeMatched) continue;
         
