@@ -1260,34 +1260,13 @@ class AppleTracker {
       yesterday.setDate(yesterday.getDate() - 1);
       const today = new Date().toISOString().split('T')[0];
       
-      console.log(`🔍 檢查摘要通知 - 找到 ${activeUsers.length} 個活躍使用者`);
-      
       for (const user of activeUsers) {
-        // 特別檢查目標用戶
-        if (user.lineUserId === 'U9e62f451cb830dd221cd536345f55280') {
-          console.log(`👤 檢查用戶: ${user.lineUserId}`);
-          console.log(`📋 摘要設定:`, user.summarySettings);
-        }
-        
         const summarySettings = user.summarySettings?.dailySummary;
-        if (!summarySettings?.enabled) {
-          if (user.lineUserId === 'U9e62f451cb830dd221cd536345f55280') {
-            console.log(`❌ 用戶 ${user.lineUserId} 摘要功能未啟用`);
-          }
-          continue;
-        }
+        if (!summarySettings?.enabled) continue;
         
         // 檢查是否今天已經發送過摘要
         const lastSentDate = user.lastSummaryDate;
-        if (user.lineUserId === 'U9e62f451cb830dd221cd536345f55280') {
-          console.log(`📅 上次發送日期: ${lastSentDate}, 今天: ${today}`);
-        }
-        if (lastSentDate === today) {
-          if (user.lineUserId === 'U9e62f451cb830dd221cd536345f55280') {
-            console.log(`⏭️ 今天已經發送過摘要，跳過`);
-          }
-          continue;
-        }
+        if (lastSentDate === today) continue;
         
         // 檢查時間是否匹配
         const now = new Date();
@@ -1297,11 +1276,6 @@ class AppleTracker {
         const currentHour = now.getHours();
         const currentMinute = now.getMinutes();
         
-        if (user.lineUserId === 'U9e62f451cb830dd221cd536345f55280') {
-          console.log(`⏰ 預定時間: ${summarySettings.time} (${scheduledHour}:${scheduledMinute})`);
-          console.log(`⏰ 目前時間: ${currentHour}:${currentMinute}`);
-        }
-        
         // 計算當前時間的總分鐘數和預定時間的總分鐘數
         const currentTotalMinutes = currentHour * 60 + currentMinute;
         const scheduledTotalMinutes = scheduledHour * 60 + scheduledMinute;
@@ -1310,16 +1284,7 @@ class AppleTracker {
         // 如果今天還沒發送過摘要且已經過了預定時間，就發送
         const timeMatched = currentTotalMinutes >= scheduledTotalMinutes;
         
-        if (user.lineUserId === 'U9e62f451cb830dd221cd536345f55280') {
-          console.log(`🕐 時間檢查: 目前${currentTotalMinutes}分 >= 預定${scheduledTotalMinutes}分 = ${timeMatched}`);
-        }
-        
-        if (!timeMatched) {
-          if (user.lineUserId === 'U9e62f451cb830dd221cd536345f55280') {
-            console.log(`⏰ 還沒到發送時間，跳過`);
-          }
-          continue;
-        }
+        if (!timeMatched) continue;
         
         const summary = await this.generateDailySummary(yesterday);
         if (summary) {
