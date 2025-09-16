@@ -1136,7 +1136,10 @@ class AppleTracker {
                 matchingRules: []
               });
             }
-            productRuleMap.get(product.url).matchingRules.push(rule.name);
+            const matchingRules = productRuleMap.get(product.url).matchingRules;
+            if (!matchingRules.includes(rule.name)) {
+              matchingRules.push(rule.name);
+            }
           }
         }
 
@@ -1268,28 +1271,29 @@ class AppleTracker {
         const lastSentDate = user.lastSummaryDate;
         if (lastSentDate === today) continue;
         
-        // 檢查時間是否匹配
+        // 檢查時間是否匹配 (使用台灣時區)
         const now = new Date();
+        const taiwanTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Taipei"}));
         const [hour, minute] = summarySettings.time.split(':');
         const scheduledHour = parseInt(hour);
         const scheduledMinute = parseInt(minute);
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
-        
+        const currentHour = taiwanTime.getHours();
+        const currentMinute = taiwanTime.getMinutes();
+
         // 計算當前時間的總分鐘數和預定時間的總分鐘數
         const currentTotalMinutes = currentHour * 60 + currentMinute;
         const scheduledTotalMinutes = scheduledHour * 60 + scheduledMinute;
-        
+
         // 檢查是否已經到了或過了預定時間
-        // 如果今天還沒發送過摘要且已經過了預定時間，就發送
         const timeMatched = currentTotalMinutes >= scheduledTotalMinutes;
-        
+
         if (!timeMatched) continue;
-        
+
         const summary = await this.generateDailySummary(yesterday);
         if (summary) {
           await this.notificationManager.sendNotification(user, summary);
           await this.firebaseService.updateUserLastSummaryDate(user.lineUserId, today);
+          console.log(`📤 摘要已發送 - 用戶: ${user.lineUserId}, 時間: ${taiwanTime.toLocaleString('zh-TW')}`);
         }
       }
     } catch (error) {
