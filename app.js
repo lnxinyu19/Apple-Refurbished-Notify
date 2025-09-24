@@ -1303,42 +1303,59 @@ class AppleTracker {
 
   async generateDailySummary(date) {
     try {
-      const newProducts = await this.firebaseService.getProductsFromDate(date);
-      let totalProducts = await this.firebaseService.getAllProducts();
-      
-      // 如果 Firebase 中沒有產品資料，直接爬取當前產品數量
-      if (totalProducts.length === 0) {
-        const currentProducts = await this.scrapeProducts();
-        totalProducts = currentProducts;
-      }
-      
-      if (newProducts.length === 0) {
-        return `📊 每日摘要 (${date.toLocaleDateString('zh-TW')})\n\n昨日沒有新的整修產品上架。\n📱 目前總數: ${totalProducts.length} 個`;
-      }
-      
-      const categories = this.categorizeProducts(newProducts);
-      
-      let message = `📊 每日摘要 (${date.toLocaleDateString('zh-TW')})\n\n`;
-      message += `🆕 昨日新品: ${newProducts.length} 個\n`;
-      message += `📱 目前總數: ${totalProducts.length} 個\n\n`;
-      
-      message += `📱 昨日新品分類:\n`;
-      Object.entries(categories).forEach(([category, count]) => {
-        message += `• ${category}: ${count} 個\n`;
-      });
-      
-      // 顯示熱門產品（前3個）
-      if (newProducts.length > 0) {
-        message += `\n🔥 熱門新品:\n`;
-        newProducts.slice(0, 3).forEach((product, index) => {
-          const shortName = product.name
-            .replace(/整修品.*$/, "")
-            .replace(/Apple\s*/gi, "")
-            .trim();
-          message += `${index + 1}. ${shortName}\n   💰 ${product.price}\n`;
+      // 獲取今天最新的產品列表
+      const todayProducts = await this.scrapeProducts();
+
+      // 獲取昨天的產品列表
+      const yesterdayProducts = await this.firebaseService.getProductsFromDate(date);
+
+      // 如果沒有昨天的數據，則從所有產品中取得前一天的數據
+      let yesterdayProductIds = new Set();
+      if (yesterdayProducts.length > 0) {
+        yesterdayProductIds = new Set(yesterdayProducts.map(p => p.id));
+      } else {
+        // 從 Firebase 取得前一天的所有產品作為基準
+        const allProducts = await this.firebaseService.getAllProducts();
+        const yesterdayDate = new Date(date);
+        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+        const baseProducts = allProducts.filter(p => {
+          const createdAt = new Date(p.createdAt.seconds * 1000);
+          return createdAt <= yesterdayDate;
         });
+        yesterdayProductIds = new Set(baseProducts.map(p => p.id));
       }
-      
+
+      // 找出真正的新產品（今天有，昨天沒有的）
+      const newProducts = todayProducts.filter(p => !yesterdayProductIds.has(p.id));
+
+      // 計算總數變化
+      const totalToday = todayProducts.length;
+      const totalYesterday = yesterdayProductIds.size;
+      const totalChange = totalToday - totalYesterday;
+
+      let message = `📊 每日摘要 (${date.toLocaleDateString('zh-TW')})\n\n`;
+
+      if (newProducts.length === 0 && totalChange <= 0) {
+        return `${message}昨日沒有新的整修產品上架。\n📱 目前總數: ${totalToday} 個`;
+      }
+
+      if (newProducts.length > 0) {
+        message += `🆕 昨日新品: ${newProducts.length} 個\n`;
+
+        const categories = this.categorizeProducts(newProducts);
+        message += `📱 昨日新品分類:\n`;
+        Object.entries(categories).forEach(([category, count]) => {
+          message += `• ${category}: ${count} 個\n`;
+        });
+        message += '\n';
+      }
+
+      message += `📱 目前總數: ${totalToday} 個`;
+      if (totalChange !== 0) {
+        const changeText = totalChange > 0 ? `+${totalChange}` : `${totalChange}`;
+        message += ` (較昨日 ${changeText})`;
+      }
+
       return message;
     } catch (error) {
       console.error('生成每日摘要失敗:', error);
