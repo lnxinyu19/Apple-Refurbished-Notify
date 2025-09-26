@@ -363,6 +363,85 @@ class FirebaseService {
       };
     }
   }
+
+  // 每日快照管理
+  async saveDailySnapshot(date, products) {
+    try {
+      const dateStr = this.formatDateString(date);
+      const snapshotData = {
+        date: dateStr,
+        products: products,
+        totalCount: products.length,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      await this.db.collection('daily_snapshots').doc(dateStr).set(snapshotData);
+      console.log(`💾 每日快照已保存: ${dateStr} (${products.length} 個產品)`);
+      return true;
+    } catch (error) {
+      console.error('保存每日快照失敗:', error);
+      return false;
+    }
+  }
+
+  async getDailySnapshot(date) {
+    try {
+      const dateStr = this.formatDateString(date);
+      const doc = await this.db.collection('daily_snapshots').doc(dateStr).get();
+
+      if (doc.exists) {
+        return doc.data();
+      }
+      return null;
+    } catch (error) {
+      console.error('獲取每日快照失敗:', error);
+      return null;
+    }
+  }
+
+  async getLatestSnapshot() {
+    try {
+      const snapshot = await this.db.collection('daily_snapshots')
+        .orderBy('createdAt', 'desc')
+        .limit(1)
+        .get();
+
+      if (!snapshot.empty) {
+        return snapshot.docs[0].data();
+      }
+      return null;
+    } catch (error) {
+      console.error('獲取最新快照失敗:', error);
+      return null;
+    }
+  }
+
+  formatDateString(date) {
+    return date.toISOString().split('T')[0]; // YYYY-MM-DD
+  }
+
+  // 清理舊快照（保留最近30天）
+  async cleanupOldSnapshots(keepDays = 30) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - keepDays);
+      const cutoffStr = this.formatDateString(cutoffDate);
+
+      const querySnapshot = await this.db.collection('daily_snapshots')
+        .where('date', '<', cutoffStr)
+        .get();
+
+      const batch = this.db.batch();
+      querySnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+
+      await batch.commit();
+      console.log(`🗑️  清理了 ${querySnapshot.size} 個舊快照`);
+    } catch (error) {
+      console.error('清理舊快照失敗:', error);
+    }
+  }
 }
 
 module.exports = FirebaseService;

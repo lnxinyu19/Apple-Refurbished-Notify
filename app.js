@@ -1103,6 +1103,7 @@ class AppleTracker {
       if (newProducts.length === 0) {
         if (this.firebaseService.initialized) {
           await this.firebaseService.saveProductHistory(allProducts);
+          await this.saveDailySnapshotIfNeeded(allProducts);
         }
         return {
           totalProducts: allProducts.length,
@@ -1194,6 +1195,7 @@ class AppleTracker {
 
       if (this.firebaseService.initialized) {
         await this.firebaseService.saveProductHistory(allProducts);
+        await this.saveDailySnapshotIfNeeded(allProducts);
       }
 
       return {
@@ -1210,6 +1212,39 @@ class AppleTracker {
         totalNewMatches: 0,
         notifiedUsers: 0,
       };
+    }
+  }
+
+  // 產品 Key 生成（與 Firebase 服務一致）
+  getProductKey(url) {
+    return url.split('?')[0]; // 移除查詢參數，只保留基礎 URL
+  }
+
+  // 每日快照管理
+  async saveDailySnapshotIfNeeded(products) {
+    if (!this.firebaseService.initialized) {
+      return;
+    }
+
+    try {
+      const today = new Date();
+      const todayStr = this.firebaseService.formatDateString(today);
+
+      // 檢查今天是否已有快照
+      const existingSnapshot = await this.firebaseService.getDailySnapshot(today);
+
+      if (!existingSnapshot) {
+        // 建立今天的快照
+        await this.firebaseService.saveDailySnapshot(today, products);
+
+        // 清理舊快照（每次建立新快照時清理）
+        await this.firebaseService.cleanupOldSnapshots();
+      } else {
+        // 更新現有快照（因為產品可能有變化）
+        await this.firebaseService.saveDailySnapshot(today, products);
+      }
+    } catch (error) {
+      console.error('保存每日快照時發生錯誤:', error);
     }
   }
 
@@ -1303,34 +1338,46 @@ class AppleTracker {
 
   async generateDailySummary(date) {
     try {
-      // 獲取今天最新的產品列表
-      const todayProducts = await this.scrapeProducts();
+      // 獲取今天的快照（如果沒有則即時爬取）
+      let todaySnapshot = await this.firebaseService.getDailySnapshot(date);
+      let todayProducts;
 
-      // 獲取昨天的產品列表
-      const yesterdayProducts = await this.firebaseService.getProductsFromDate(date);
-
-      // 如果沒有昨天的數據，則從所有產品中取得前一天的數據
-      let yesterdayProductIds = new Set();
-      if (yesterdayProducts.length > 0) {
-        yesterdayProductIds = new Set(yesterdayProducts.map(p => p.id));
+      if (!todaySnapshot) {
+        // 沒有今天的快照，即時爬取並建立快照
+        todayProducts = await this.scrapeProducts();
+        await this.saveDailySnapshotIfNeeded(todayProducts);
+        todaySnapshot = { products: todayProducts, totalCount: todayProducts.length };
       } else {
-        // 從 Firebase 取得前一天的所有產品作為基準
-        const allProducts = await this.firebaseService.getAllProducts();
-        const yesterdayDate = new Date(date);
-        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-        const baseProducts = allProducts.filter(p => {
-          const createdAt = new Date(p.createdAt.seconds * 1000);
-          return createdAt <= yesterdayDate;
-        });
-        yesterdayProductIds = new Set(baseProducts.map(p => p.id));
+        todayProducts = todaySnapshot.products || [];
       }
 
-      // 找出真正的新產品（今天有，昨天沒有的）
-      const newProducts = todayProducts.filter(p => !yesterdayProductIds.has(p.id));
+      // 獲取昨天的快照
+      const yesterday = new Date(date);
+      yesterday.setDate(yesterday.getDate() - 1);
+      let yesterdaySnapshot = await this.firebaseService.getDailySnapshot(yesterday);
+
+      // 如果沒有昨天的快照，嘗試從更早的快照或回退到舊邏輯
+      let yesterdayProducts = [];
+      if (yesterdaySnapshot) {
+        yesterdayProducts = yesterdaySnapshot.products || [];
+      } else {
+        // 回退邏輯：尋找最近的快照作為基準
+        const latestSnapshot = await this.firebaseService.getLatestSnapshot();
+        if (latestSnapshot && latestSnapshot.date < this.firebaseService.formatDateString(date)) {
+          yesterdayProducts = latestSnapshot.products || [];
+        }
+      }
+
+      // 建立產品 ID 集合以便比較
+      const todayProductIds = new Set(todayProducts.map(p => this.getProductKey(p.url)));
+      const yesterdayProductIds = new Set(yesterdayProducts.map(p => this.getProductKey(p.url)));
+
+      // 找出新產品（今天有，昨天沒有的）
+      const newProducts = todayProducts.filter(p => !yesterdayProductIds.has(this.getProductKey(p.url)));
 
       // 計算總數變化
       const totalToday = todayProducts.length;
-      const totalYesterday = yesterdayProductIds.size;
+      const totalYesterday = yesterdayProducts.length;
       const totalChange = totalToday - totalYesterday;
 
       let message = `📊 每日摘要 (${date.toLocaleDateString('zh-TW')})\n\n`;
