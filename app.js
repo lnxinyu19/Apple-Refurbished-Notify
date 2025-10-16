@@ -367,6 +367,7 @@ class AppleTracker {
     this.browser = await puppeteer.launch({
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      protocolTimeout: 120000, // 2 minutes timeout
     });
 
     // 檢查並自動重啟追蹤
